@@ -1,0 +1,406 @@
+/* shared/ui/pickers.css — date picker, time list, date/time fields, select */
+
+/* ================================================================
+   Date picker
+   ================================================================ */
+
+.dp-popover {
+  padding: 12px;
+}
+
+.dp {
+  width: 280px;
+}
+
+.dp-header {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin-bottom: 4px;
+}
+
+.dp-spacer {
+  flex: 1;
+}
+
+.dp-label {
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+
+.dp-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+  height: 32px;
+  align-items: center;
+  text-align: center;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+  grid-auto-rows: 40px;
+}
+
+.dp-grid.slide-next {
+  animation: dp-slide-next var(--dur-medium) var(--ease-emphasized);
+}
+
+.dp-grid.slide-prev {
+  animation: dp-slide-prev var(--dur-medium) var(--ease-emphasized);
+}
+
+@keyframes dp-slide-next {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+@keyframes dp-slide-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+.dp-day {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  transition: background var(--dur-short), color var(--dur-short),
+    transform var(--dur-short) var(--ease-emphasized);
+}
+
+.dp-day.outside {
+  color: var(--md-on-surface-muted);
+  opacity: 0.6;
+}
+
+.dp-day.today {
+  box-shadow: inset 0 0 0 1px var(--md-primary);
+  color: var(--md-primary);
+  opacity: 1;
+}
+
+.dp-day.selected {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+  font-weight: 500;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.dp-day:active {
+  transform: scale(0.92);
+}
+
+/* ================================================================
+   Time list
+   ================================================================ */
+
+.tl-popover {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tl {
+  position: relative; /* so item.offsetTop is measured from the list */
+  width: 190px;
+  max-height: 264px;
+  padding: 8px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tl-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  text-align: left;
+  align-items: center;
+}
+
+.tl-hint {
+  color: var(--md-on-surface-muted);
+  font-size: 12px;
+}
+
+.tl-item[aria-selected="true"] {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+
+.tl-item[aria-selected="true"] .tl-hint {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* ================================================================
+   Date / time inputs
+   ================================================================ */
+
+.dt-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dt-input {
+  position: relative;
+  height: 36px;
+  border-radius: var(--shape-sm);
+  background: var(--md-surface-high);
+  transition: background var(--dur-short), box-shadow var(--dur-short);
+}
+
+.dt-input:hover {
+  background: var(--md-surface-highest);
+}
+
+.dt-input:focus-within {
+  background: var(--md-surface-highest);
+  box-shadow: inset 0 -2px 0 var(--md-primary);
+}
+
+.dt-date {
+  width: 138px;
+}
+
+.dt-time {
+  width: 96px;
+}
+
+.dt-text {
+  width: 100%;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+.dt-input.error {
+  box-shadow: inset 0 -2px 0 var(--md-error-strong);
+}
+
+.dt-input.shake {
+  animation: shake 400ms var(--ease-emphasized);
+}
+
+@keyframes shake {
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ================================================================
+   Start / end pair
+   ================================================================ */
+
+.range-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-label {
+  width: 36px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.range-error {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: var(--md-error-strong);
+  font-size: 12px;
+  line-height: 16px;
+  transition: max-height var(--dur-medium) var(--ease-emphasized), opacity var(--dur-medium);
+}
+
+.range-error.visible {
+  max-height: 24px;
+  opacity: 1;
+}
+
+/* ================================================================
+   Due-date popover
+   ================================================================ */
+
+.due-popover {
+  width: 304px;
+}
+
+.due-picker {
+  padding: 12px 12px 8px;
+}
+
+.due-picker .divider {
+  margin: 8px 0;
+}
+
+.due-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--shape-md);
+  background: transparent;
+  color: var(--md-on-surface);
+  text-align: left;
+}
+
+.due-time svg {
+  width: 20px;
+  height: 20px;
+  color: var(--md-on-surface-variant);
+}
+
+.due-time-text {
+  flex: 1;
+}
+
+.due-time-value {
+  color: var(--md-primary);
+  font-weight: 500;
+}
+
+.due-time[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
+}
+
+.due-time svg:last-child {
+  transition: transform var(--dur-medium) var(--ease-emphasized);
+}
+
+.due-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-medium) var(--ease-emphasized);
+}
+
+.due-collapse > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.due-collapse.closed {
+  grid-template-rows: 0fr;
+}
+
+.due-collapse .tl {
+  width: 100%;
+  max-height: 232px;
+}
+
+.due-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+/* ================================================================
+   Select (outlined)
+   ================================================================ */
+
+.select-field {
+  position: relative;
+  min-width: 220px;
+}
+
+.select-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 48px;
+  padding: 0 8px 0 16px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--shape-xs);
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: 15px;
+  text-align: left;
+  transition: border-color var(--dur-short);
+}
+
+.select-button svg {
+  width: 24px;
+  height: 24px;
+  color: var(--md-on-surface-variant);
+  transition: transform var(--dur-medium) var(--ease-emphasized);
+}
+
+.select-button[aria-expanded="true"] {
+  border-color: var(--md-primary);
+  box-shadow: inset 0 0 0 1px var(--md-primary);
+}
+
+.select-button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+  color: var(--md-primary);
+}
+
+.select-label {
+  position: absolute;
+  left: 12px;
+  top: -9px;
+  padding: 0 4px;
+  background: var(--md-field-bg, var(--md-background));
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.select-button[aria-expanded="true"] + .select-label {
+  color: var(--md-primary);
+}
+
+.select-menu {
+  max-height: 320px;
+  overflow-y: auto;
+}

@@ -1,0 +1,77 @@
+# Model profiles. Budgets elsewhere are fractions of `window` (capped by each recipe's max_input_tokens), so
+# swapping a model needs only an entry here.
+# Costs are USD per million tokens, from published Gemini API list prices as of 2026-10-07. The free tier does not
+# bill, so these only feed the approval card's worst-case estimate. RE-CHECK BEFORE 2027-01-01: Gemini 3.8 Flash
+# goes from $0.75/$3.75 to $1.50/$7.50 on that date.
+#
+# chars_per_token is 3.5 for Gemini, not 4: structured prompts (times, markdown, JSON) measured 3.38 chars/token, so 4.0
+# UNDER-counted a real schedule prompt (estimate 525 vs actual 531). Prose measured ~4.0, so 3.5 stays safely high.
+#
+# reasoning_effort: Gemini 3.x models think by default and CANNOT turn it off; the thinking tokens are hidden, billed like
+# output, and count inside max_tokens (a 50-token cap returned an empty answer). Measured on 2026-10-07, this value is
+# sent with every call. Which values a model accepts differs: gemini-3.7-flash rejects "minimal" with HTTP 400.
+# See docs/gemini_api_findings.md for the measurements and scripts/api_probe.py to repeat them.
+
+default = "gemini-3.6-flash"
+
+[models.fake]
+provider = "fake"
+window = 8000
+input_cost = 0.0
+output_cost = 0.0
+supports_tools = true
+supports_json = true
+chars_per_token = 4.0
+safety_margin = 1.15
+
+# The default (the user's choice). No verified list price was found for 3.6 Flash, so this uses 3.8 Flash's as a
+# deliberate upper bound: the estimate may overstate, it will not understate.
+# "low": tested. Default (medium) thinking used 817 hidden tokens on a schedule call and had 1 clean success in 5 attempts
+# (the others: 503, two timeouts, one reply cut off); low/minimal succeeded 8 of 9 (the miss was a 503). Small samples taken
+# while the service was busy, so a trend and not a proof; "low" used 0-284 hidden tokens.
+[models."gemini-3.6-flash"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.75
+output_cost = 3.75
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+reasoning_effort = "low"
+
+# Answered HTTP 503 "high demand" on 2 of 2 attempts on 2026-10-07, so it is not the default. "low" is untested here.
+[models."gemini-3.8-flash"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.75
+output_cost = 3.75
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+reasoning_effort = "low"
+
+# Answered a schedule request in 22 s with a valid draft (default effort, 0 hidden tokens). No effort override.
+[models."gemini-3.5-flash-lite"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.30
+output_cost = 2.50
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+
+# The fallback when the chosen model is overloaded or silent ([llm] fallback_model). Answered a schedule request in 3.0 s
+# at "minimal" with a valid draft. Price from the published list ($0.25 / $1.50).
+[models."gemini-3.1-flash-lite"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.25
+output_cost = 1.50
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+reasoning_effort = "minimal"

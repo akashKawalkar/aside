@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Agent</title>
+  <link rel="stylesheet" href="../shared/ui/fonts.css" />
+  <link rel="stylesheet" href="../shared/ui/tokens.css" />
+  <link rel="stylesheet" href="../shared/ui/components.css" />
+  <link rel="stylesheet" href="../shared/ui/pickers.css" />
+  <link rel="stylesheet" href="../shared/ui/event.css" />
+  <link rel="stylesheet" href="../shared/ui/draft.css" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- App bar -->
+    <header id="app-bar">
+      <span id="paused-chip" class="chip small warn" hidden title="Monitoring is paused">
+        <span data-icon="pause"></span>Paused
+      </span>
+      <span class="spacer"></span>
+      <button id="menu-button" class="icon-btn small stateful" aria-label="More options"
+              aria-haspopup="menu" aria-expanded="false" data-icon="more_vert"></button>
+    </header>
+
+    <!-- Always-visible tiles -->
+    <section id="tiles">
+      <section class="tile card" id="tile-tasks">
+        <header class="tile-header">
+          <span class="tile-icon" data-icon="task_alt"></span>
+          <h2 class="tile-title">Tasks</h2>
+          <span class="spacer"></span>
+          <span id="tasks-count" class="tile-count" hidden></span>
+        </header>
+        <ul class="tile-list" id="tile-tasks-list"></ul>
+      </section>
+
+      <section class="tile card" id="tile-schedule">
+        <header class="tile-header clickable stateful" id="schedule-header"
+                role="button" tabindex="0" aria-expanded="false">
+          <span class="tile-icon" data-icon="event"></span>
+          <h2 class="tile-title">What's next</h2>
+          <span class="spacer"></span>
+          <span class="tile-chevron" data-icon="expand_more"></span>
+        </header>
+        <ul class="tile-list" id="tile-schedule-list"></ul>
+        <div id="tile-schedule-draft"></div>
+      </section>
+    </section>
+
+    <!-- Scrolling chat thread. Tagged captures never appear here. -->
+    <main id="chat-thread" aria-live="polite">
+      <div class="chat-empty-state">
+        <span class="empty-mark" data-icon="spark"></span>
+        <p class="empty-title">What's on your mind?</p>
+        <ul class="hint-list">
+          <li><span class="keycap">Enter</span> send in the current mode</li>
+          <li><span class="keycap">Tab</span> switch mode</li>
+          <li><span class="keycap">Ctrl</span>+<span class="keycap">Enter</span> let a script decide</li>
+          <li>Start with <b>task:</b> <b>schedule:</b> or <b>note:</b> to pick</li>
+        </ul>
+      </div>
+    </main>
+
+    <!-- Composer -->
+    <footer id="composer" data-mode="chat">
+      <div id="mode-chips" role="radiogroup" aria-label="Mode">
+        <span id="mode-indicator" aria-hidden="true"></span>
+      </div>
+
+      <div id="input-pill">
+        <span id="input-icon" aria-hidden="true"></span>
+        <input id="composer-input" type="text" autocomplete="off" spellcheck="true"
+               placeholder="Ask me anything…" aria-label="Message" />
+        <span id="tab-hint" class="keycap" title="Press Tab to switch mode">Tab</span>
+        <span id="status-ring" class="ring-idle" role="status" aria-label="Ready" title="Ready"></span>
+        <button id="send-button" class="send-button stateful" aria-label="Send" disabled></button>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="panel.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+# Context recipes: which sources go into a prompt, in what priority, within what budget.
+# Every number here is a starting point to be tuned by experiment.
+#
+# input_fraction   share of the model window the packed context may use
+# max_input_tokens absolute ceiling on the packed context; the budget is min(window * input_fraction, this).
+#                  Needed because a fraction of a 1M-token window (Gemini) is ~500k tokens and no cap would ever bind.
+#                  Also the free-tier guard: a huge prompt burns the per-minute token allowance in one call.
+# [recipe.sources.<name>]
+#   priority       higher packs first (persistent file > skills > schedule > tasks > notes)
+#   cap_fraction   share of the recipe's budget this one source may use
+#   max_items      optional hard cap on items from this source
+#   min_confidence optional, items below it are dropped
+#   exclude_status statuses never packed (default: retired, shelved)
+
+[chat]
+input_fraction = 0.5
+max_input_tokens = 8000
+selector = "off"
+
+[chat.sources.current_session]
+priority = 95
+cap_fraction = 0.25
+
+[chat.sources.persistent_file]
+priority = 90
+cap_fraction = 0.30
+
+[chat.sources.skills]
+priority = 80
+cap_fraction = 0.20
+max_items = 2
+
+[chat.sources.schedule]
+priority = 70
+cap_fraction = 0.15
+
+[chat.sources.tasks]
+priority = 60
+cap_fraction = 0.15
+
+[chat.sources.notes]
+priority = 50
+cap_fraction = 0.20
+
+[chat.sources.observations]
+priority = 40
+cap_fraction = 0.05
+max_items = 3
+
+[chat.sources.history]
+priority = 30
+cap_fraction = 0.10
+
+[schedule]
+input_fraction = 0.6
+max_input_tokens = 6000
+selector = "off"
+
+# Schedule generation (plan 3.6). Everything below the persistent file is fed by schedule_gen/gather.py, once per call.
+# Instructions outrank even the persistent file: they are the user's request for this very draft.
+[schedule.sources.instructions]
+priority = 95
+cap_fraction = 0.10
+
+[schedule.sources.persistent_file]
+priority = 90
+cap_fraction = 0.25
+
+[schedule.sources.fixed]
+priority = 85
+cap_fraction = 0.12
+
+[schedule.sources.current_draft]
+priority = 84
+cap_fraction = 0.12
+
+[schedule.sources.candidates]
+priority = 75
+cap_fraction = 0.12
+
+[schedule.sources.weekday_template]
+priority = 70
+cap_fraction = 0.20
+
+[schedule.sources.tasks]
+priority = 60
+cap_fraction = 0.12
+
+[schedule.sources.free_slots]
+priority = 50
+cap_fraction = 0.05
+
+[schedule.sources.observations]
+priority = 40
+cap_fraction = 0.05
+max_items = 3
+
+[schedule.sources.history]
+priority = 30
+cap_fraction = 0.05
+
+[extraction]
+input_fraction = 0.3
+max_input_tokens = 4000
+selector = "off"
+
+[extraction.sources.current_session]
+priority = 95
+cap_fraction = 0.60
+
+[extraction.sources.persistent_file]
+priority = 90
+cap_fraction = 0.25
+
+[extraction.sources.schedule]
+priority = 70
+cap_fraction = 0.15

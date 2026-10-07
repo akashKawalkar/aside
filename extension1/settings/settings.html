@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Agent — Settings</title>
+  <link rel="stylesheet" href="../shared/ui/fonts.css" />
+  <link rel="stylesheet" href="../shared/ui/tokens.css" />
+  <link rel="stylesheet" href="../shared/ui/components.css" />
+  <link rel="stylesheet" href="../shared/ui/pickers.css" />
+  <link rel="stylesheet" href="../shared/ui/event.css" />
+  <link rel="stylesheet" href="../shared/ui/draft.css" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div id="shell">
+
+    <header id="top-bar">
+      <button id="nav-toggle" class="icon-btn stateful" aria-label="Collapse navigation" data-icon="menu"></button>
+      <span class="app-mark" data-icon="spark"></span>
+      <h1>Personal Agent <span class="muted">Settings</span></h1>
+    </header>
+
+    <nav id="drawer" aria-label="Settings sections">
+      <span id="nav-indicator" aria-hidden="true"></span>
+      <button class="nav-item stateful" data-tab="general"><span class="nav-icon" data-icon="tune"></span><span class="nav-label">General</span></button>
+      <button class="nav-item stateful" data-tab="tasks"><span class="nav-icon" data-icon="task_alt"></span><span class="nav-label">Tasks</span></button>
+      <button class="nav-item stateful" data-tab="task-history"><span class="nav-icon" data-icon="history"></span><span class="nav-label">Task history</span></button>
+      <button class="nav-item stateful" data-tab="schedule"><span class="nav-icon" data-icon="event"></span><span class="nav-label">Schedule</span></button>
+      <button class="nav-item stateful" data-tab="drafts"><span class="nav-icon" data-icon="spark"></span><span class="nav-label">Drafts</span></button>
+      <button class="nav-item stateful" data-tab="review"><span class="nav-icon" data-icon="notes"></span><span class="nav-label">Review</span></button>
+      <span class="nav-divider"></span>
+      <button class="nav-item stateful" data-tab="inspect"><span class="nav-icon" data-icon="visibility"></span><span class="nav-label">What changed</span></button>
+      <button class="nav-item stateful" data-tab="context"><span class="nav-icon" data-icon="spark"></span><span class="nav-label">Context</span></button>
+      <button class="nav-item stateful" data-tab="data-gaps"><span class="nav-icon" data-icon="monitor"></span><span class="nav-label">Data gaps</span></button>
+      <button class="nav-item stateful" data-tab="persistent-file"><span class="nav-icon" data-icon="description"></span><span class="nav-label">Persistent file</span></button>
+            <button class="nav-item stateful" data-tab="skills"><span class="nav-icon" data-icon="lightbulb"></span><span class="nav-label">Skills</span></button>
+      <button class="nav-item stateful" data-tab="statements"><span class="nav-icon" data-icon="chat"></span><span class="nav-label">Statements</span></button>
+<button class="nav-item stateful" data-tab="notes"><span class="nav-icon" data-icon="sticky_note_2"></span><span class="nav-label">Notes</span></button>
+      <button class="nav-item stateful" data-tab="tables"><span class="nav-icon" data-icon="table_chart"></span><span class="nav-label">Tables</span></button>
+      <button class="nav-item stateful" data-tab="ring-log"><span class="nav-icon" data-icon="sync_problem"></span><span class="nav-label">Connection log</span></button>
+    </nav>
+
+    <main id="content">
+
+      <!-- General: monitoring toggle -->
+      <section class="tab-panel active" id="tab-general">
+        <header class="section-head">
+          <h2>General</h2>
+          <p class="supporting">Monitoring.</p>
+        </header>
+
+        <div class="card setting-card">
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="title-medium">Monitoring</div>
+              <div class="supporting">Record which app is in focus so your day can be reviewed.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-monitoring" role="switch" aria-label="Monitoring enabled" />
+              <span class="track"><span class="thumb"></span></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tasks: every pending task, editable inline (Google Tasks style) -->
+      <section class="tab-panel" id="tab-tasks">
+        <header class="section-head">
+          <h2>Tasks</h2>
+          <p class="supporting">Pending tasks, soonest due first. Edit a title in place and press Enter; click the date to reschedule.</p>
+        </header>
+        <div class="card list-card" id="tasks-view"></div>
+      </section>
+
+      <!-- Task history: completed, deleted and expired -->
+      <section class="tab-panel" id="tab-task-history">
+        <header class="section-head">
+          <h2>Task history</h2>
+          <p class="supporting">Tasks that were completed, deleted or expired, newest first.</p>
+        </header>
+        <div class="card list-card" id="task-history-view"></div>
+      </section>
+
+      <!-- Schedule: one day at a time -->
+      <section class="tab-panel" id="tab-schedule">
+        <header class="section-head">
+          <h2>Schedule</h2>
+          <p class="supporting">Browse any day. Click an entry to edit it.</p>
+        </header>
+        <div class="sched-toolbar">
+          <button id="schedule-today" class="btn outlined stateful">Today</button>
+          <button id="schedule-prev" class="icon-btn stateful" aria-label="Previous day" data-icon="chevron_left"></button>
+          <button id="schedule-next" class="icon-btn stateful" aria-label="Next day" data-icon="chevron_right"></button>
+          <button id="schedule-date" class="date-label stateful" aria-haspopup="dialog"></button>
+        </div>
+        <div class="card list-card" id="schedule-view"></div>
+      </section>
+
+      <!-- Drafts: every generated schedule version, with reasons -->
+      <section class="tab-panel" id="tab-drafts">
+        <header class="section-head">
+          <h2>Drafts</h2>
+          <p class="supporting">Every schedule draft ever made, newest first: why each block was proposed, what the checks dropped, and how the day turned out against the first draft.</p>
+        </header>
+        <div id="drafts-list" class="flex-column gap-3"></div>
+      </section>
+
+      <!-- Review: the latest nightly review plus when and how it is delivered -->
+      <section class="tab-panel" id="tab-review">
+        <header class="section-head">
+          <h2>Review</h2>
+          <p class="supporting">Written each night so you can plan tomorrow. It never interrupts: it's here when you look.</p>
+        </header>
+        <div class="card review-card" id="review-view"></div>
+        <div class="review-actions">
+          <button id="review-preview" class="btn outlined stateful">Preview today</button>
+        </div>
+
+        <div id="review-draft-group" hidden>
+          <h3 class="group-title">Tomorrow</h3>
+          <div class="card setting-card" id="review-draft-card"></div>
+        </div>
+
+        <h3 class="group-title">Delivery</h3>
+        <div class="card setting-card">
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="title-medium">Written at</div>
+              <div class="supporting">Your laptop has to be on. If it isn't, that night is skipped.</div>
+            </div>
+            <div id="review-time-slot"></div>
+          </div>
+        </div>
+        <div class="card setting-card">
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="title-medium">Email me the review</div>
+              <div class="supporting">Off by default. Sent right after it's written, at the interval you pick.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="review-email-toggle" role="switch" aria-label="Email the review" />
+              <span class="track"><span class="thumb"></span></span>
+            </label>
+          </div>
+          <div class="review-fields">
+            <div class="text-field">
+              <input id="review-recipient" type="email" placeholder=" " autocomplete="email" />
+              <span class="label">Send to</span>
+            </div>
+            <div id="review-frequency-slot"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- What changed -->
+      <section class="tab-panel" id="tab-inspect">
+        <header class="section-head">
+          <h2>What changed</h2>
+          <p class="supporting">Every change made to the persistent file, and what caused it. Undo puts an entry back as it was.</p>
+        </header>
+        <div id="diff-log-view"></div>
+      </section>
+
+      <!-- Context viewer -->
+      <section class="tab-panel" id="tab-context">
+        <header class="section-head">
+          <h2>Context</h2>
+          <p class="supporting">What went into each prompt, what was left out and why. Open one to replay it under another recipe.</p>
+        </header>
+        <div id="context-view"></div>
+      </section>
+
+      <!-- Data gaps -->
+      <section class="tab-panel" id="tab-data-gaps">
+        <header class="section-head">
+          <h2>Data gaps</h2>
+          <p class="supporting">Where tracking has holes during waking hours, and why. Idle time counts as tracked.</p>
+        </header>
+        <div id="gaps-health" class="gaps-health"></div>
+        <div class="gaps-month">
+          <button type="button" class="icon-btn stateful" id="gaps-prev" aria-label="Previous month" data-icon="chevron_left"></button>
+          <span id="gaps-title" class="gaps-title"></span>
+          <button type="button" class="icon-btn stateful" id="gaps-next" aria-label="Next month" data-icon="chevron_right"></button>
+        </div>
+        <div id="gaps-view"></div>
+      </section>
+
+      <!-- Persistent file -->
+      <section class="tab-panel" id="tab-persistent-file">
+        <header class="section-head">
+          <h2>Persistent file</h2>
+          <p class="supporting">What the agent always knows about you. Every change is logged under What changed, where it can be undone.</p>
+        </header>
+        <div id="persistent-view"></div>
+      </section>
+
+      
+      <!-- Skills -->
+      <section class="tab-panel" id="tab-skills">
+        <header class="section-head">
+          <h2>Skills</h2>
+          <p class="supporting">Hand-written instructions that the agent loads based on context.</p>
+        </header>
+        <div id="skills-list" class="flex-column gap-3"></div>
+      </section>
+
+      <!-- Statements -->
+      <section class="tab-panel" id="tab-statements">
+        <header class="section-head">
+          <h2>Statements / Candidates / Instructions</h2>
+          <p class="supporting">View structured data from the extraction tables.</p>
+        </header>
+        <div class="flex-column gap-3">
+            <h3>Statements</h3>
+            <div id="statements-list" class="flex-column gap-2"></div>
+            <h3>Candidate Items</h3>
+            <div id="candidate-items-list" class="flex-column gap-2"></div>
+            <h3>Instruction Records</h3>
+            <div id="instruction-records-list" class="flex-column gap-2"></div>
+        </div>
+      </section>
+
+        <!-- Notes -->
+      <section class="tab-panel" id="tab-notes">
+        <header class="section-head">
+          <h2>Notes</h2>
+          <p class="supporting">Captured notes, indexed by tags.</p>
+        </header>
+        <div class="notes-toolbar" style="padding: 0 24px 16px;">
+           <div id="notes-tag-filters" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+        </div>
+        <div class="card list-card" id="notes-view"></div>
+      </section>
+
+      <!-- Raw table browsing -->
+      <section class="tab-panel" id="tab-tables">
+        <header class="section-head">
+          <h2>Tables</h2>
+          <p class="supporting">The latest rows from any table.</p>
+        </header>
+        <div class="table-toolbar">
+          <div id="table-select-slot"></div>
+          <span id="table-count" class="chip small" hidden></span>
+        </div>
+        <div id="table-view"></div>
+      </section>
+
+      <!-- Ring/connection failure log (client-side, from chrome.storage.local) -->
+      <section class="tab-panel" id="tab-ring-log">
+        <header class="section-head">
+          <h2>Connection log</h2>
+          <p class="supporting">Every non-success response the panel has seen: why something was saved with a default, or why a request failed.</p>
+        </header>
+        <div id="ring-log-view"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="settings.js" type="module"></script>
+</body>
+</html>

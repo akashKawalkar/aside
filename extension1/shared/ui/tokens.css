@@ -1,0 +1,82 @@
+/* shared/ui/tokens.css — Material 3, Google dark palette */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- colour roles ---- */
+  --md-background: #131314;
+  --md-surface: #1e1f20;           /* cards */
+  --md-surface-low: #1b1b1d;
+  --md-surface-high: #282a2c;      /* raised rows, inputs */
+  --md-surface-highest: #333537;   /* hover, menus */
+  --md-on-surface: #e3e3e3;
+  --md-on-surface-variant: #c4c7c5;
+  --md-on-surface-muted: #9aa0a6;
+  --md-outline: #8e918f;
+  --md-outline-variant: #444746;   /* dividers */
+
+  --md-primary: #a8c7fa;
+  --md-on-primary: #062e6f;
+  --md-primary-container: #0842a0;
+  --md-on-primary-container: #d3e3fd;
+  --md-secondary-container: #004a77;
+  --md-on-secondary-container: #c2e7ff;
+  --md-tertiary: #6dd58c;
+
+  --md-error: #f2b8b5;
+  --md-error-strong: #f28b82;
+  --md-error-container: #601410;
+  --md-warning: #fdd663;
+  --md-success: #6dd58c;
+
+  --md-inverse-surface: #e3e3e3;
+  --md-inverse-on-surface: #1f1f1f;
+  --md-scrim: rgba(0, 0, 0, 0.5);
+
+  /* ---- shape ---- */
+  --shape-xs: 4px;
+  --shape-sm: 8px;
+  --shape-md: 12px;
+  --shape-lg: 16px;
+  --shape-xl: 28px;
+  --shape-full: 999px;
+
+  /* ---- elevation ---- */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 3px 1px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 6px 2px rgba(0, 0, 0, 0.3);
+  --elev-3: 0 4px 8px 3px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.45);
+
+  /* ---- motion ---- */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decel: cubic-bezier(0, 0, 0, 1);
+  --ease-accel: cubic-bezier(0.3, 0, 1, 1);
+  --dur-short: 150ms;
+  --dur-medium: 250ms;
+  --dur-long: 400ms;
+
+  /* ---- state layers ---- */
+  --state-hover: 0.08;
+  --state-focus: 0.1;
+  --state-press: 0.1;
+
+  /* ---- type ---- */
+  --font: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Roboto Mono", Consolas, "SF Mono", monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-short: 0ms;
+    --dur-medium: 0ms;
+    --dur-long: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

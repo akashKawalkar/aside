@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Personal Agent",
+  "version": "0.2.0",
+  "description": "Local-first personal context agent",
+  "permissions": ["sidePanel", "storage", "commands", "alarms", "tabs", "idle"],
+  "host_permissions": ["http://localhost:8787/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  },
+  "action": {},
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+A" },
+      "description": "Open panel and focus input"
+    },
+    "toggle-monitoring": {
+      "suggested_key": { "default": "Ctrl+Shift+M" },
+      "description": "Pause or resume monitoring without opening the panel"
+    },
+    "open-note": {
+      "suggested_key": { "default": "Alt+Shift+N" },
+      "description": "Open the panel in Note mode"
+    },
+    "open-schedule": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Open the panel in Schedule mode"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
