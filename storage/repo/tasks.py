@@ -229,6 +229,8 @@ async def update_task(
             # A due-date change is the signal for a task that keeps slipping.
             if row is not None and due_at is not _UNSET and row[2] != old_due:
                 await cur.execute(DUE_LOG_SQL, (task_id, old_due, row[2]))
+                if old_due is not None and row[2] > old_due:   # postponed (not pulled earlier)
+                    await cur.execute("UPDATE tasks SET slip_count = slip_count + 1 WHERE id = %s", (task_id,))
 
     if row is None:
         return None
@@ -270,6 +272,27 @@ async def complete_task(
                 ),
             )
 
+    return task
+
+
+async def restore_task(pool, *, task_id: int, now: datetime | None = None) -> dict[str, Any] | None:
+    """Undo a completion. A due date that has passed is reset to the 24 h default (the expiry worker would otherwise
+    delete the task at once); that reset is not logged as a slip, because the user did not postpone anything."""
+    now = now or datetime.now().astimezone()
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """UPDATE tasks SET status = 'pending', completed_at = NULL,
+                          due_at = CASE WHEN due_at IS NOT NULL AND due_at < %s THEN %s ELSE due_at END
+                   WHERE id = %s AND status = 'completed'
+                   RETURNING id, text, due_at, status, created_at, completed_at""",
+                (now, now + timedelta(hours=24), task_id),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                return None
+            task = _row_to_dict(row)
+            await cur.execute(TASK_LOG_SQL, (task["id"], "restored", json.dumps(task, default=str)))
     return task
 
 
@@ -360,6 +383,45 @@ async def expire_tasks(
     return expired
 
 
+async def list_pending_with_slips(pool) -> list[dict[str, Any]]:
+    """Pending tasks, each with how many times its due date was postponed (the schedule generator's view)."""
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT id, text, due_at, status, created_at, completed_at, slip_count
+                   FROM tasks WHERE status = 'pending' ORDER BY due_at IS NULL, due_at, created_at"""
+            )
+            rows = await cur.fetchall()
+    return [{**_row_to_dict(r), "slip_count": r[6]} for r in rows]
+
+
+async def drop_stale_tasks(pool, *, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Mark pending tasks that are too overdue or slipped too often as dropped (kept, with the reason, in task_log)."""
+    from sessions.task_lifecycle import stale_reason
+
+    now = now or datetime.now().astimezone()
+    dropped = []
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT id, text, due_at, status, created_at, completed_at, slip_count
+                   FROM tasks WHERE status = 'pending' FOR UPDATE"""
+            )
+            for row in await cur.fetchall():
+                reason = stale_reason(row[2], row[6], now)
+                if reason is None:
+                    continue
+                task = {**_row_to_dict(row), "status": "dropped", "dropped_reason": reason}
+                await cur.execute(
+                    "UPDATE tasks SET status = 'dropped', dropped_at = %s, dropped_reason = %s WHERE id = %s",
+                    (now, reason, task["id"]),
+                )
+                await cur.execute(TASK_LOG_SQL, (task["id"], "dropped", json.dumps(task, default=str)))
+                dropped.append(task)
+
+    return dropped
+
+
 async def list_task_log(
     pool,
     *,
@@ -382,5 +444,22 @@ async def list_task_log(
             "snapshot": row[3],
             "created_at": row[4],
         }
+        for row in rows
+    ]
+
+
+async def list_task_due_changes(pool, *, since: datetime) -> list[dict[str, Any]]:
+    """Due-date changes with current task text when that task still exists."""
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT d.task_id, t.text, d.old_due, d.new_due, d.created_at
+                   FROM task_due_log d LEFT JOIN tasks t ON t.id = d.task_id
+                   WHERE d.created_at >= %s ORDER BY d.created_at, d.id""",
+                (since,),
+            )
+            rows = await cur.fetchall()
+    return [
+        {"task_id": row[0], "text": row[1], "old_due": row[2], "new_due": row[3], "created_at": row[4]}
         for row in rows
     ]

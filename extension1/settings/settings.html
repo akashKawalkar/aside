@@ -33,6 +33,7 @@
       <button class="nav-item stateful" data-tab="inspect"><span class="nav-icon" data-icon="visibility"></span><span class="nav-label">What changed</span></button>
       <button class="nav-item stateful" data-tab="context"><span class="nav-icon" data-icon="spark"></span><span class="nav-label">Context</span></button>
       <button class="nav-item stateful" data-tab="data-gaps"><span class="nav-icon" data-icon="monitor"></span><span class="nav-label">Data gaps</span></button>
+      <button class="nav-item stateful" data-tab="observations"><span class="nav-icon" data-icon="event"></span><span class="nav-label">Patterns</span></button>
       <button class="nav-item stateful" data-tab="persistent-file"><span class="nav-icon" data-icon="description"></span><span class="nav-label">Persistent file</span></button>
             <button class="nav-item stateful" data-tab="skills"><span class="nav-icon" data-icon="lightbulb"></span><span class="nav-label">Skills</span></button>
       <button class="nav-item stateful" data-tab="statements"><span class="nav-icon" data-icon="chat"></span><span class="nav-label">Statements</span></button>
@@ -47,7 +48,7 @@
       <section class="tab-panel active" id="tab-general">
         <header class="section-head">
           <h2>General</h2>
-          <p class="supporting">Monitoring.</p>
+          <p class="supporting">Monitoring and privacy.</p>
         </header>
 
         <div class="card setting-card">
@@ -61,6 +62,14 @@
               <span class="track"><span class="thumb"></span></span>
             </label>
           </div>
+        </div>
+
+        <div class="card setting-card">
+          <div class="setting-text">
+            <div class="title-medium">What may leave this machine</div>
+            <div class="supporting">Read-only. These rules are applied before anything is sent to a model (chat, drafts and the nightly job). Change them in config.toml.</div>
+          </div>
+          <div id="privacy-view" class="flex-column gap-3"></div>
         </div>
       </section>
 
@@ -186,6 +195,15 @@
         <div id="gaps-view"></div>
       </section>
 
+      <!-- Code-only pattern observations -->
+      <section class="tab-panel" id="tab-observations">
+        <header class="section-head">
+          <h2>Patterns</h2>
+          <p class="supporting">Repeated patterns from recorded schedules, sessions, and task changes. Schedule routines are marked with a question after two expected days are missed and dropped after three. Delete anything you do not want kept.</p>
+        </header>
+        <div id="observations-view" class="flex-column gap-3"></div>
+      </section>
+
       <!-- Persistent file -->
       <section class="tab-panel" id="tab-persistent-file">
         <header class="section-head">
@@ -227,6 +245,9 @@
           <h2>Notes</h2>
           <p class="supporting">Captured notes, indexed by tags.</p>
         </header>
+        <div class="notes-toolbar" style="padding: 0 24px 8px;">
+           <input id="notes-search" class="notes-search" type="search" placeholder="Search notes (words or meaning; stays on this computer)" aria-label="Search notes" maxlength="500" />
+        </div>
         <div class="notes-toolbar" style="padding: 0 24px 16px;">
            <div id="notes-tag-filters" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
         </div>

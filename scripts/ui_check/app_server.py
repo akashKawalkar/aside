@@ -2,7 +2,7 @@
 # replaced so a UI check never touches a real day or a real API:
 #   default   FakeClient with scripted schedule replies, clock fixed at 2031-03-03 12:00 IST ("tomorrow" = 2031-03-04)
 #   UI_BAD=1  the fake model answers with something unusable (to check the failure path)
-#   UI_REAL=1 NO fake model: the real Gemini client, still behind the approval gate and the daily cap (used by M6c)
+#   UI_REAL=1 NO fake model: the real Gemini client, still behind the gate and the daily cap (used by M6c)
 #   UI_NOW=real  use the real clock instead of the fixed one
 # Never uses 8787. Port from UI_PORT (default 8788).
 from __future__ import annotations

@@ -13,8 +13,7 @@ class Source(Protocol):
 
 
 class EmptySource:
-    """Placeholder for a source whose data does not exist yet (persistent file, skills, notes, history,
-    observations arrive in M3/M5). A recipe may already name it."""
+    """Placeholder for sources whose data has not been wired yet."""
 
     def __init__(self, name: str) -> None:
         self.name = name

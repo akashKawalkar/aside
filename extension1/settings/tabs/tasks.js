@@ -1,5 +1,5 @@
 // settings/tabs/tasks.js — pending tasks (Google Tasks style).
-import { getTasks, updateTask, completeTask, deleteTask } from "../../shared/api.js";
+import { getTasks, updateTask, completeTask, deleteTask, restoreTask } from "../../shared/api.js";
 import { h } from "../../shared/ui/dom.js";
 import { icon, checkTick } from "../../shared/ui/icons.js";
 import { showSnackbar } from "../../shared/ui/snackbar.js";
@@ -119,7 +119,15 @@ function taskRow(task) {
     }
 
     await removeRow(row, () => loadTasks({ quiet: true }));
-    showSnackbar("Task completed");
+    showSnackbar("Task completed", {
+      action: "Undo",
+      duration: 8000,
+      onAction: async () => {
+        const undone = await restoreTask(task.id);
+        if (undone.status === "error") showSnackbar(envelopeError(undone));
+        await loadTasks({ quiet: true });
+      },
+    });
   });
 
   remove.addEventListener("click", async () => {

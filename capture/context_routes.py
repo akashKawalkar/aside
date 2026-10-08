@@ -51,7 +51,7 @@ def make_context_router(op_ok, op_error) -> APIRouter:
         row = await get_compile_log(request.app.state.db_pool, log_id)
         if row is None:
             return op_error("No such compile.")
-        out = replay_compile(row, recipes[recipe], load_profile())
+        out = await replay_compile(row, recipes[recipe], load_profile())
         return op_ok(data={
             "recipe": recipe, "text": out.text, "tokens": out.result.tokens, "budget": out.result.budget,
             "by_source": out.result.by_source,

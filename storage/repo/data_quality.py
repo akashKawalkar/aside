@@ -82,6 +82,18 @@ async def get_schedule_snapshot(pool, *, day: date) -> list[dict[str, Any]] | No
     return row[0] if row else None
 
 
+async def list_day_records(pool, *, first: date, last: date) -> list[dict[str, Any]]:
+    """Nightly inputs for deterministic pattern summaries, oldest day first."""
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT day, data, late FROM day_record WHERE day BETWEEN %s AND %s ORDER BY day",
+                (first, last),
+            )
+            rows = await cur.fetchall()
+    return [{"day": row[0], "data": row[1], "late": row[2]} for row in rows]
+
+
 async def days_with_snapshot(pool, *, first: date, last: date) -> set[date]:
     return await _days(pool, "schedule_snapshot", first, last)
 

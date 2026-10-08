@@ -45,12 +45,16 @@ from storage import (
     Embedder,
     delete_task,
     list_task_log,
-    expire_tasks,
+    drop_stale_tasks,
     insert_many,
     list_sessions_range,
     list_completed_tasks,
     count_notes,
     list_tasks_due,
+    list_observations,
+    restore_task,
+    insert_statement,
+    mark_observation_deleted,
 )
 from capture.context_routes import make_context_router
 from capture.data_routes import make_data_router
@@ -59,10 +63,12 @@ from capture.heartbeat import heartbeat_files
 from review.daily import run_daily_worker
 from review.generate import ReviewGenerator
 from review.runner import run_review_worker
-from review.store import ReviewSettings, ReviewStore
-from capture.llm_approval import ApprovalRegistry
-from capture.llm_routes import make_llm_router
+from review.wiring import make_review_generator
+from review.store import DbBackend, ReviewSettings, ReviewStore
+from capture import llm_run
 from capture.schedule_gen_routes import make_schedule_gen_router
+from extractor.worker import run_extractor_worker
+from patterns.job import run_pattern_worker
 from context.compile import compile_context
 from context.items import Situation
 from context.recipe import load_recipe
@@ -73,6 +79,8 @@ from context.sources.notes import notes_source
 from context.sources.current_session import CurrentSessionSource
 from context.sources.schedule import ScheduleSource
 from context.sources.tasks import TasksSource
+from context.sources.observations import observations_source
+from llm.approved import QuotaExceeded
 from llm.client import Message, load_profile
 from storage import insert_compile_log
 import logging
@@ -211,6 +219,7 @@ BROWSABLE_TABLES = {
     "task_log",
     "schedule",
     "schedule_draft",
+    "observations",
 }
 
 async def _default_diff_log_handler() -> OperationResponse:
@@ -317,7 +326,7 @@ def create_app(
       - classification
       - memory
     """
-    review_store = ReviewStore(load_config().spool_dir.parent)
+    review_store = ReviewStore(DbBackend(lambda: app.state.db_pool))
 
     async def _run_note_embedding_worker(
         pool,
@@ -342,13 +351,13 @@ def create_app(
         pool,
         interval: float = 600.0,
     ) -> None:
-        """Delete tasks three days past due, logging each as 'expired'."""
+        """Drop stale tasks (over 4 days overdue or postponed twice), logging each as 'dropped' with its reason."""
         while True:
             try:
-                expired = await expire_tasks(pool)
+                dropped = await drop_stale_tasks(pool)
 
-                if expired:
-                    logger.info("expired %d tasks", expired)
+                if dropped:
+                    logger.info("dropped %d stale tasks", len(dropped))
 
             except asyncio.CancelledError:
                 raise
@@ -373,37 +382,34 @@ def create_app(
 
             await asyncio.sleep(interval)
 
-    def _make_review_generator(pool) -> ReviewGenerator:
-        return ReviewGenerator(
-            fetch_sessions=lambda s, e: list_sessions_range(pool, start=s, end=e),
-            fetch_schedule=lambda s, e: list_schedule_range(pool, start=s, end=e),
-            fetch_completed_tasks=lambda s, e: list_completed_tasks(pool, start=s, end=e),
-            fetch_notes_count=lambda s, e: count_notes(pool, start=s, end=e),
-            fetch_due_tasks=lambda s, e: list_tasks_due(pool, start=s, end=e),
-        )
+    _make_review_generator = make_review_generator
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         pool = make_pool()
         await pool.open()
         app.state.db_pool = pool
+        await review_store.import_legacy_files(load_config().spool_dir.parent)
         app.state.review_generator = _make_review_generator(pool)
         embedder = Embedder()
         await asyncio.to_thread(embedder.warm)
         embedding_task = asyncio.create_task(_run_note_embedding_worker(pool, embedder))
         expiry_task = asyncio.create_task(_run_task_expiry_worker(pool))
-        review_task = asyncio.create_task(
+        in_action = load_config().cloud.nightly_in_action     # the nightly Action owns review, daily record, patterns, extractor
+        review_task = None if in_action else asyncio.create_task(
             run_review_worker(app.state.review_generator, review_store)
         )
         dq = load_config().data_quality
         heartbeat_task = asyncio.create_task(
             _run_heartbeat_sampler(pool, dq.heartbeat_sample_interval, dq.heartbeat_stale_after)
         )
-        daily_task = asyncio.create_task(run_daily_worker(pool, app.state.review_generator, dq))
+        daily_task = None if in_action else asyncio.create_task(run_daily_worker(pool, app.state.review_generator, dq))
+        pattern_task = None if in_action else asyncio.create_task(run_pattern_worker(pool, load_config().patterns))
+        extractor_task = None if in_action else asyncio.create_task(run_extractor_worker(pool))     # idle while [llm] background_enabled = false
         try:
             yield
         finally:
-            workers = (embedding_task, expiry_task, review_task, heartbeat_task, daily_task)
+            workers = [t for t in (embedding_task, expiry_task, review_task, heartbeat_task, daily_task, pattern_task, extractor_task) if t]
             for task in workers:
                 task.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
@@ -414,14 +420,22 @@ def create_app(
         redoc_url=None,
         lifespan = lifespan
     )
-    approval_registry = ApprovalRegistry()
-    app.state.approval_registry = approval_registry
 
     app.include_router(make_context_router(op_ok, op_error))
     app.include_router(make_data_router(op_ok, op_error))
     app.include_router(make_persistent_router(op_ok, op_error, load_config().memory))
-    app.include_router(make_llm_router(op_ok, op_error, approval_registry))
-    app.include_router(make_schedule_gen_router(op_ok, op_error, approval_registry))
+    app.include_router(make_schedule_gen_router(op_ok, op_error))
+
+    @app.get("/observations", response_model=OperationResponse)
+    async def observations() -> OperationResponse:
+        rows = await list_observations(app.state.db_pool)
+        return op_ok(data={"observations": rows})
+
+    @app.delete("/observations/{observation_id}", response_model=OperationResponse)
+    async def delete_observation(observation_id: int) -> OperationResponse:
+        if not await mark_observation_deleted(app.state.db_pool, observation_id):
+            return op_error("Observation not found.")
+        return op_ok(message="Observation deleted.")
     
     # Local development: allow the Chrome extension origin to call localhost.
     # Extension IDs aren't stable across dev/packed builds, so this stays
@@ -449,6 +463,16 @@ def create_app(
     @app.get("/monitoring", response_model=OperationResponse)
     async def get_monitoring() -> OperationResponse:
         return op_ok(data={"enabled": monitoring.enabled()})
+
+    @app.get("/privacy", response_model=OperationResponse)
+    async def get_privacy() -> OperationResponse:
+        """What may leave the machine (plan §3.9). Read-only: the rules live in config.toml [privacy] and [llm]."""
+        cfg = load_config()
+        return op_ok(data={
+            "deny_sources": cfg.privacy.deny_sources, "deny_tags": cfg.privacy.deny_tags,
+            "background_enabled": cfg.llm.background_enabled, "daily_call_cap": cfg.llm.daily_call_cap,
+            "calls_today": await llm_run.calls_today(app.state.db_pool),
+        })
 
     @app.post("/monitoring", response_model=OperationResponse)
     async def set_monitoring(request: MonitoringRequest) -> OperationResponse:
@@ -479,6 +503,19 @@ def create_app(
             result = await result
         return result
 
+    async def find_notes(q: str, limit: int) -> list[dict]:
+        """Local note lookup: keyword (any word of 3+ letters) plus semantic similarity from the local embedder.
+        No model API is involved and nothing is written."""
+        pool = app.state.db_pool
+        results = await search_notes_combined(
+            q,
+            search_notes_repo=lambda query, search_limit: search_notes(pool, query, limit=search_limit, match_any=True),
+            semantic_search=lambda **kwargs: search(pool, **{**kwargs, "min_similarity": load_config().memory.note_similarity_cutoff}),
+            limit=limit,
+        )
+        return [{"id": r.id, "text": r.text, "tags": list(r.tags), "source": r.source,
+                 "created_at": r.created_at, "match": r.match} for r in results]
+
     @app.get("/notes/search", response_model=OperationResponse)
     async def notes_search(q: str, limit: int = 10) -> OperationResponse:
         if not q.strip():
@@ -487,47 +524,9 @@ def create_app(
         if limit <= 0:
             return op_error("limit must be greater than zero.")
 
-        pool = app.state.db_pool
+        results = await find_notes(q, limit)
+        return op_ok(message=f"Found {len(results)} notes.", data={"results": results})
 
-        results = await search_notes_combined(
-            q,
-            search_notes_repo=lambda query, search_limit: search_notes(
-                pool,
-                query,
-                limit=search_limit,
-            ),
-            semantic_search=lambda **kwargs: search(
-                pool,
-                **kwargs,
-            ),
-            limit=limit,
-        )
-
-        return op_ok(
-            message=f"Found {len(results)} notes.",
-            data={
-                "results": [
-                    (
-                        {
-                            "id": result.id,
-                            "text": result.text,
-                            "tags": list(result.tags),
-                            "source": result.source,
-                            "created_at": result.created_at,
-                            "match": result.match,
-                        }
-                        if hasattr(result, "match")
-                        else {
-                            "id": result.id,
-                            "text": result.text,
-                            "score": result.score,
-                            "metadata": result.metadata,
-                        }
-                    )
-                    for result in results
-                ]
-            },
-        )
     @app.get("/notes", response_model=OperationResponse)
     async def get_notes_route(limit: int = 50) -> OperationResponse:
         pool = app.state.db_pool
@@ -585,13 +584,19 @@ def create_app(
             return op_ok(data={"destination": "wrong", "saved_as": "wrong", "id": mark_id, "ring": ring,
                                "fallback": False, "reason": result.reason})
 
+        if result.destination == "find":
+            found = await find_notes(result.text, 10)
+            logger.info("input routed destination=find results=%d", len(found))
+            return op_ok(data={"destination": "find", "saved_as": "none", "ring": ring, "fallback": False,
+                               "reason": result.reason, "notes": found})
+
         # Chat routing
         target = result.destination
         if target == "chat_script":
             fallback, ring = True, "yellow"
             target = classify(result.text)
         elif target == "chat_llm":
-            # Compile context with the chat recipe and stage for user inspection and approval
+            # Compile context with the chat recipe and ask the model directly (the daily cap and the privacy layer are the guards)
             profile = getattr(app.state, "llm_profile", None) or load_profile()
             recipe = load_recipe("chat")
             sources = {
@@ -601,7 +606,7 @@ def create_app(
                 "schedule": ScheduleSource(lambda **kw: list_schedule_range(pool, **kw)),
                 "tasks": TasksSource(lambda **kw: list_tasks(pool, **kw)),
                 "notes": notes_source(pool),
-                "observations": EmptySource("observations"),
+                "observations": observations_source(pool),
                 "history": EmptySource("history"),
             }
             async def _safe_save_log(row):
@@ -612,7 +617,7 @@ def create_app(
                     return None
 
             compiled = await compile_context(
-                Situation("chat", query=result.text),
+                Situation("chat", query=result.text, extra={"is_user_message": True}),
                 recipe,
                 sources,
                 profile,
@@ -623,25 +628,18 @@ def create_app(
                 Message("system", compiled.text),
                 Message("user", result.text),
             ]
-            staged = app.state.approval_registry.stage(
-                profile=profile,
-                messages=messages,
-                context_text=compiled.text,
-                query=result.text,
-                tokens_estimate=compiled.result.tokens,
-                compile_log_id=compiled.id,
-            )
-            logger.info("chat_llm staged for approval id=%s query=%r", staged.id, result.text)
+            try:
+                completion = await llm_run.run_user_call(
+                    app, profile=profile, messages=messages, operation="chat", compile_log_id=compiled.id,
+                )
+            except QuotaExceeded as exc:
+                return op_error(str(exc))
+            except Exception as exc:
+                logger.exception("chat model call failed")
+                return op_error(f"The model call failed: {exc}")
             return op_ok(
-                message="Context compiled. Ready for your review and approval.",
-                data={
-                    "destination": "chat_llm",
-                    "saved_as": "pending_llm_approval",
-                    "ring": "yellow",
-                    "approval_required": True,
-                    "pending_id": staged.id,
-                    "preview": staged.to_preview(),
-                },
+                message="Reply ready.",
+                data={"destination": "chat_llm", "saved_as": "none", "ring": "yellow", **llm_run.reply_data(completion, compiled.id)},
             )
 
         if target == "note" or target == "journal_note":
@@ -656,6 +654,10 @@ def create_app(
                 return op_error("Note capture failed.")
 
             record_id = note.id
+            try:        # raw material for the nightly extractor; a failure here must never lose the note itself
+                await insert_statement(pool, result.text, "journal" if target == "journal_note" else "note")
+            except Exception:
+                logger.warning("could not record statement for note %s", record_id)
 
         elif target == "task":
             task = await create_task(pool, text=result.text)
@@ -858,6 +860,13 @@ def create_app(
                 "task": task,
             },
         )
+    @app.post("/tasks/{task_id}/restore", response_model=OperationResponse)
+    async def restore_task_route(task_id: int) -> OperationResponse:
+        task = await restore_task(app.state.db_pool, task_id=task_id)
+        if task is None:
+            return op_error("Task not found or not completed.")
+        return op_ok(message="Task restored.", data={"task": task})
+
     @app.get("/tasks", response_model=OperationResponse)
     async def get_tasks(limit: int = 5) -> OperationResponse:
         # The side panel asks for 5; the settings page asks for many.
@@ -905,8 +914,8 @@ def create_app(
         """The latest nightly review, or null if none has been written yet."""
         return op_ok(
             data={
-                "review": review_store.latest(),
-                "settings": asdict(review_store.settings()),
+                "review": await review_store.latest(),
+                "settings": asdict(await review_store.settings()),
             },
         )
 
@@ -922,7 +931,7 @@ def create_app(
     @app.post("/settings/review", response_model=OperationResponse)
     async def set_review_settings(request: ReviewSettingsRequest) -> OperationResponse:
         try:
-            saved = review_store.save_settings(ReviewSettings(**request.model_dump()))
+            saved = await review_store.save_settings(ReviewSettings(**request.model_dump()))
         except ValueError as exc:
             return op_error(str(exc))
 

@@ -1,5 +1,5 @@
 // settings/tabs/notes.js
-import { getNotes, updateNote, deleteNote } from "../../shared/api.js";
+import { getNotes, searchNotes, updateNote, deleteNote } from "../../shared/api.js";
 import { h } from "../../shared/ui/dom.js";
 import { icon } from "../../shared/ui/icons.js";
 import { showSnackbar } from "../../shared/ui/snackbar.js";
@@ -7,8 +7,10 @@ import { $, envelopeError, emptyState, showLoading, removeRow } from "./_shared.
 
 const view = $("notes-view");
 const filterView = $("notes-tag-filters");
+const searchBox = $("notes-search");
 let activeTag = null;
 let allNotes = [];
+let lastQuery = "";
 
 function parseDate(isoString) {
   if (!isoString) return "";
@@ -98,7 +100,7 @@ function renderNotes() {
   const visible = activeTag === null ? allNotes : allNotes.filter(n => (n.tags || []).includes(activeTag));
   
   if (!visible.length) {
-    view.replaceChildren(h("p", { class: "supporting pf-none", style: "padding: 16px;" }, "No notes found."));
+    view.replaceChildren(h("p", { class: "supporting pf-none", style: "padding: 16px;" }, searchBox.value.trim() ? "No notes match that search." : "No notes found."));
     return;
   }
   
@@ -108,12 +110,22 @@ function renderNotes() {
 
 export async function loadNotes({ quiet = false } = {}) {
   if (!quiet) showLoading(view, 4);
-  const envelope = await getNotes(200);
+  const query = searchBox.value.trim();
+  const envelope = query ? await searchNotes(query, 50) : await getNotes(200);
+  if (searchBox.value.trim() !== query) return;        // typed on while this was loading: a newer load owns the view
   if (envelope.status === "error") {
     view.replaceChildren(emptyState("error", `Couldn't load notes: ${envelopeError(envelope)}`));
     return;
   }
-  allNotes = envelope.data.notes || [];
+  allNotes = (query ? envelope.data.results : envelope.data.notes) || [];
+  if (query !== lastQuery) activeTag = null;
+  lastQuery = query;
   renderNotes();
 }
+
+let searchTimer = null;
+searchBox.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadNotes({ quiet: true }), 300);
+});
 

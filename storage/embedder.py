@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import threading
-import numpy as np
-from sentence_transformers import SentenceTransformer
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # heavy imports stay lazy so the cloud job installs without torch
+    from sentence_transformers import SentenceTransformer
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,8 @@ class Embedder:
         if not text.strip():
             raise ValueError("text must not be empty")
 
+        import numpy as np
+
         vector = self._get_model().encode(
             text,
             normalize_embeddings=self.normalize,
@@ -97,6 +101,8 @@ class Embedder:
         if any(not text.strip() for text in texts):
             raise ValueError("texts must not contain empty strings")
 
+        import numpy as np
+
         vectors = self._get_model().encode(
             texts,
             normalize_embeddings=self.normalize,
@@ -122,5 +128,7 @@ def _load_model(model_name: str) -> SentenceTransformer:
     Cached separately so experiments with another model name don't
     require changing the Embedder implementation.
     """
+
+    from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(model_name)

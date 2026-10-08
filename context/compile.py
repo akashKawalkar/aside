@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from config import load_config
 from context.gate import gate_text
 from context.items import Dropped, Item, Situation
 from context.packer import PackResult, pack, render
+from context.privacy import denied_reason
 from context.recipe import Recipe
 from context.selector import Selector, make_selector
 from context.sources import Source
@@ -64,21 +66,29 @@ async def compile_context(
 
     fetched = await asyncio.gather(*(sources[s.name].fetch(situation) for s in recipe.sources), return_exceptions=True)
 
+    rules = load_config().privacy
     offered: list[Item] = []
     dropped: list[Dropped] = []
     for spec, outcome in zip(recipe.sources, fetched):
+        if spec.name in rules.deny_sources:     # the privacy layer (plan §3.9): nothing from a denied source is even offered
+            dropped.append(Dropped(f"source:{spec.name}", spec.name, "privacy_denied_source"))
+            continue
         if isinstance(outcome, BaseException):      # one broken source must not take the whole context down
             dropped.append(Dropped(f"source:{spec.name}", spec.name, "source_error"))
             continue
         for item in outcome:
+            reason = denied_reason(spec.name, item.tags, rules)
+            if reason:
+                dropped.append(Dropped(item.id, spec.name, reason))
+                continue
             if max_item_tokens is not None:     # the result gate: one oversized item must not eat a source's whole slice
                 gated = gate_text(item.text, max_item_tokens, profile)
                 if gated != item.text:
                     item.text, item.tokens = gated, 0
             item.tokens = item.tokens or estimate_tokens(item.text, profile)
-        offered.extend(outcome)
+            offered.append(item)
 
-    selected, not_selected = (selector or make_selector(recipe.selector)).select(offered, situation)
+    selected, not_selected = await (selector or make_selector(recipe.selector)).select(offered, situation)
     dropped.extend(not_selected)
 
     result = pack(selected, recipe, profile, now=now)

@@ -12,6 +12,7 @@ import { createDatePicker } from "./datepicker.js";
 import { createTimeList } from "./timepicker.js";
 import {
   formatDate,
+  addDays,
   formatTime,
   parseDate,
   parseTime,
@@ -394,9 +395,37 @@ export function openDuePicker({ anchor, value, onSave, now = new Date() } = {}) 
     setTimeout(() => popover?.reposition(), 320);
   }
 
+  // One-click presets save at once; the calendar below stays for anything else.
+  const at = (daysAhead, hours) => withTime(addDays(startOfDay(now), daysAhead), { hours, minutes: 0 });
+  const toNextMonday = ((8 - now.getDay()) % 7) || 7;
+  const presets = [
+    { label: "This evening", date: at(0, 18) },
+    { label: "Tomorrow", date: at(1, 9) },
+    { label: "Next Monday", date: at(toNextMonday, 9) },
+  ].filter((p) => p.date > now);
+  const presetRow = h(
+    "div",
+    { class: "due-presets" },
+    presets.map((p) =>
+      h(
+        "button",
+        {
+          type: "button",
+          class: "chip small stateful",
+          onclick: () => {
+            onSave?.(new Date(p.date));
+            popover?.close();
+          },
+        },
+        p.label
+      )
+    )
+  );
+
   const content = h(
     "div",
     { class: "due-picker" },
+    presets.length ? presetRow : null,
     calendarPane,
     h("hr", { class: "divider" }),
     timeButton,

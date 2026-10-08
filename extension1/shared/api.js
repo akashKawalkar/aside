@@ -6,7 +6,7 @@
 const BASE_URL = "http://localhost:8787";
 const REQUEST_TIMEOUT_MS = 30000;
 
-// A model call can legitimately take a minute or two, so an approved call gets a longer wait than the default.
+// A model call can legitimately take a minute or two, so it gets a longer wait than the default.
 // The server's own limit ([llm] request_timeout, 120 s) must stay below this, or the panel gives up first while the
 // server keeps running (and spending) the call.
 const MODEL_CALL_TIMEOUT_MS = 130000;
@@ -83,6 +83,7 @@ export const api = {
 export function sendInput(text, mode, key) {
   return request("/input", {
     method: "POST",
+    timeoutMs: MODEL_CALL_TIMEOUT_MS,      // a chat message is a model call, and a model call can take a minute or two
     body: JSON.stringify({
       text,
       mode,
@@ -115,6 +116,9 @@ export function completeTask(taskId) {
   return request(`/tasks/${taskId}/complete`, {
     method: "POST",
   });
+}
+export function restoreTask(taskId) {
+  return request(`/tasks/${taskId}/restore`, { method: "POST" });
 }
 export function getScheduleTile() {
   return request("/schedule/next", { method: "GET" });
@@ -167,6 +171,10 @@ export function getDiffLog() {
 
 export function getMonitoring() {
   return request("/monitoring", { method: "GET" });
+}
+
+export function getPrivacy() {
+  return request("/privacy", { method: "GET" });
 }
 
 export function setMonitoring(enabled) {
@@ -247,20 +255,19 @@ export function replayCompile(id, recipe) {
 
 
 // ---------- schedule drafts (plan 3.6) ----------
-// A model-made draft is only STAGED by generateDraft / reviseDraft: the reply carries a pending_id and a preview, and
-// nothing is sent until approveLLMCall(pending_id). The approved reply's data.result.draft is the new draft.
+// generateDraft / reviseDraft call the model and return the new draft in data.draft (they can take a minute or two).
 
 export function getDraftStatus() {
   return request("/schedule/draft/status", { method: "GET" });
 }
 export function generateDraft(instruction = "") {
-  return request("/schedule/draft/generate", { method: "POST", body: JSON.stringify({ instruction }) });
+  return request("/schedule/draft/generate", { method: "POST", body: JSON.stringify({ instruction }), timeoutMs: MODEL_CALL_TIMEOUT_MS });
 }
 export function placeholderDraft() {
   return request("/schedule/draft/placeholder", { method: "POST", body: "{}" });
 }
 export function reviseDraft(id, instruction) {
-  return request(`/schedule/draft/${id}/revise`, { method: "POST", body: JSON.stringify({ instruction }) });
+  return request(`/schedule/draft/${id}/revise`, { method: "POST", body: JSON.stringify({ instruction }), timeoutMs: MODEL_CALL_TIMEOUT_MS });
 }
 // fields: { title?, start_at?, end_at? }; times are ISO strings with a UTC offset.
 export function patchDraftEntry(id, index, fields) {
@@ -280,28 +287,6 @@ export function compareDraftDay(day) {
   return request(`/schedule/drafts/${encodeURIComponent(day)}/compare`, { method: "GET" });
 }
 
-// ---------- llm approval ----------
-
-export function getPendingLLMCalls() {
-  return request("/llm/pending", { method: "GET" });
-}
-
-export function getPendingLLMCall(id) {
-  return request(`/llm/pending/${encodeURIComponent(id)}`, { method: "GET" });
-}
-
-export function approveLLMCall(id) {
-  return request(`/llm/approve/${encodeURIComponent(id)}`, { method: "POST", timeoutMs: MODEL_CALL_TIMEOUT_MS });
-}
-
-export function rejectLLMCall(id, reason = null) {
-  return request(`/llm/reject/${encodeURIComponent(id)}`, {
-    method: "POST",
-    body: JSON.stringify({ reason }),
-  });
-}
-
-
 // ---------- health ----------
 
 export function checkHealth() {
@@ -315,10 +300,25 @@ export function getNotes(limit = 50) {
   return request(`/notes?limit=${limit}`, { method: "GET" });
 }
 
+// Local lookup (keyword + local embeddings); no model call.
+export function searchNotes(q, limit = 20) {
+  return request(`/notes/search?q=${encodeURIComponent(q)}&limit=${limit}`, { method: "GET" });
+}
+
 export function updateNote(id, body) {
   return request(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export function deleteNote(id) {
   return request(`/notes/${id}`, { method: "DELETE" });
+}
+
+// ---------- pattern observations ----------
+
+export function getObservations() {
+  return request("/observations", { method: "GET" });
+}
+
+export function deleteObservation(id) {
+  return request(`/observations/${id}`, { method: "DELETE" });
 }

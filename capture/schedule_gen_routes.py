@@ -1,7 +1,6 @@
 # capture/schedule_gen_routes.py — schedule generation (plan 3.6): ask for a draft of tomorrow, revise it, edit/accept/
-# discard its entries. A model-made draft goes through the same approval card as chat: the generate/revise routes only
-# STAGE a call; the user's approval (POST /llm/approve) is what sends it, and the finalizer registered below turns the
-# reply into a draft. Request models are module-level on purpose: FastAPI cannot resolve annotations of local classes.
+# discard its entries. The generate/revise routes call the model directly (capture/llm_run.py: user grant, daily cap, trace)
+# and return the new draft. Request models are module-level on purpose: FastAPI cannot resolve annotations of local classes.
 from __future__ import annotations
 
 import logging
@@ -11,16 +10,17 @@ from typing import Any
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-import capture.llm_routes as llm_routes
 import storage
-from capture.llm_approval import ApprovalRegistry
+from capture import llm_run
 from config import load_config
 from context.recipe import load_recipe
+from llm.approved import QuotaExceeded
 from llm.client import load_profile
 from schedule_gen import service
 from schedule_gen.compare import draft_vs_final
 from schedule_gen.model import IST, rules_from_config, tomorrow
-from schedule_gen.service import DraftError
+from schedule_gen.parse import ParseError
+from schedule_gen.service import DraftError, GenerationIncomplete
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class IndexesRequest(BaseModel):
     indexes: list[int] | None = Field(default=None, max_length=50)   # None = every pending entry / the whole draft
 
 
-def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> APIRouter:
+def make_schedule_gen_router(op_ok, op_error) -> APIRouter:
     router = APIRouter(prefix="/schedule")
 
     def now_of(request: Request) -> datetime:
@@ -57,16 +57,10 @@ def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> API
     def rules_for(day: date):
         return rules_from_config(day, load_config().data_quality)
 
-    async def finalize(call, completion, app) -> dict[str, Any]:
-        return await service.finalize_generation(app.state.db_pool, call, completion, rules_for(date.fromisoformat(call.meta["day"])))
-
-    registry.register_finalizer(service.KIND, finalize)
-
-    async def stage(request: Request, instruction: str, revising: dict[str, Any] | None):
-        pool = request.app.state.db_pool
+    async def make_draft(request: Request, instruction: str, revising: dict[str, Any] | None):
+        app, pool = request.app, request.app.state.db_pool
         cfg = load_config()
-        if await llm_routes.calls_today(pool) >= cfg.llm.daily_call_cap:
-            raise DraftError("The daily model-call cap is used up. Use the rule-based draft, or raise [llm] daily_call_cap in config.toml.")
+        profile = getattr(app.state, "llm_profile", None) or load_profile()
 
         async def save_log(row):
             try:
@@ -75,16 +69,26 @@ def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> API
                 logger.warning("Could not save compile log, proceeding without log_id")
                 return None
 
-        day = tomorrow(now_of(request))
-        call = await service.stage_generation(
-            pool=pool, registry=registry, profile=getattr(request.app.state, "llm_profile", None) or load_profile(),
-            recipe=load_recipe("schedule"), rules=rules_for(day), instruction=instruction, save_log=save_log,
-            max_item_tokens=cfg.llm.max_item_tokens, revising=revising,
-        )
-        return op_ok(
-            message="Draft prepared. Review the prompt and approve to send it.",
-            data={"destination": "schedule_draft", "approval_required": True, "pending_id": call.id, "preview": call.to_preview()},
-        )
+        async def complete(messages, compile_log_id):
+            return await llm_run.run_user_call(
+                app, profile=profile, messages=messages, operation=service.KIND, compile_log_id=compile_log_id,
+                max_tokens=service.GEN_MAX_TOKENS, temperature=service.GEN_TEMPERATURE, response_format={"type": "json_object"},
+            )
+
+        try:
+            draft, completion = await service.draft_with_model(
+                pool, complete, rules=rules_for(revising["target_day"] if revising else tomorrow(now_of(request))),
+                profile=profile, recipe=load_recipe("schedule"), save_log=save_log, max_item_tokens=cfg.llm.max_item_tokens,
+                instruction=instruction.strip(), revising=revising,
+            )
+        except QuotaExceeded as exc:
+            return op_error(f"{exc}. Use the rule-based draft instead.")
+        except (ParseError, GenerationIncomplete) as exc:      # the call went out and is spent; say what was wrong with the reply
+            return op_error(f"The model replied, but the reply could not be used: {exc}")
+        except Exception as exc:
+            logger.exception("schedule draft call failed")
+            return op_error(f"The model call failed: {exc}")
+        return op_ok(message="Draft ready.", data={"draft": draft, "model": completion.model, "fell_back_from": completion.fallback_from})
 
     # ---------- state ----------
 
@@ -93,7 +97,7 @@ def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> API
         pool = request.app.state.db_pool
         state = await service.status(pool, now_of(request))
         cap = load_config().llm.daily_call_cap
-        state["llm_available"] = await llm_routes.calls_today(pool) < cap
+        state["llm_available"] = await llm_run.calls_today(pool) < cap
         return op_ok(data=state)
 
     @router.get("/drafts")
@@ -130,7 +134,7 @@ def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> API
     async def generate(request: Request, body: GenerateRequest):
         try:
             await service._require_can_generate(request.app.state.db_pool, now_of(request))
-            return await stage(request, body.instruction, None)
+            return await make_draft(request, body.instruction, None)
         except DraftError as exc:
             return op_error(str(exc))
 
@@ -149,7 +153,7 @@ def make_schedule_gen_router(op_ok, op_error, registry: ApprovalRegistry) -> API
             draft = await storage.get_draft(request.app.state.db_pool, draft_id)
             if draft is None or draft["status"] != "open":
                 raise DraftError("Only an open draft can be revised.")
-            return await stage(request, body.instruction, draft)
+            return await make_draft(request, body.instruction, draft)
         except DraftError as exc:
             return op_error(str(exc))
 

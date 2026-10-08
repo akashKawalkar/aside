@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import storage
+from sessions.task_lifecycle import stale_reason
 from schedule_gen.model import IST, PENDING, Block, DraftEntry, Rules, free_slots
 
 TEMPLATE_LOOKBACK_WEEKS = 4
@@ -76,8 +77,10 @@ async def gather(pool, day: date, rules: Rules, *, open_draft: dict[str, Any] | 
     start, end = _day_bounds(day)
     existing = await storage.list_schedule_range(pool, start=start, end=end)
 
-    tasks = [t for t in await storage.list_tasks(pool, status="pending")
-             if t["due_at"] is not None and t["due_at"].astimezone(IST).date() <= day]
+    now = datetime.now(IST)
+    tasks = [t for t in await storage.list_pending_with_slips(pool)
+             if t["due_at"] is not None and t["due_at"].astimezone(IST).date() <= day
+             and stale_reason(t["due_at"], t["slip_count"], now) is None]      # stale ones are about to be dropped: not offered
     tasks.sort(key=lambda t: t["due_at"])
 
     instructions = [r["text"] for r in await storage.list_instruction_records(pool) if _in_range(r, day)]

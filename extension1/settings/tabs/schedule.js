@@ -36,7 +36,10 @@ function entryBlock(entry) {
       h("span", { class: "event-title" }, entry.title),
       h("span", { class: "event-time" }, formatTimeRange(start, end))
     ),
-    isNow ? h("span", { class: "event-badge now" }, "Now") : null
+    isNow ? h("span", { class: "event-badge now" }, "Now") : null,
+    entry.origin === "generated"
+      ? h("span", { class: "event-badge generated" }, entry.edited_by_user ? "Generated, edited" : "Generated")
+      : null
   );
 
   const open = () => openEditor(block, entry);
@@ -121,7 +124,7 @@ export async function loadSchedule({ quiet = false } = {}) {
   );
 }
 
-function setScheduleDay(day) {
+export function setScheduleDay(day) {
   scheduleDay = startOfDay(day);
   loadSchedule();
 }

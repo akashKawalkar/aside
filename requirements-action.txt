@@ -1,0 +1,13 @@
+# Dependencies of the nightly job (GitHub Action). No torch / sentence-transformers,
+# no psutil / Windows APIs, no web server: those stay laptop-only (requirements.txt).
+pydantic>=2.6
+psycopg[binary,pool]>=3.1
+pgvector>=0.2
+sqlalchemy>=2.0
+python-dotenv>=1.0
+tzdata>=2024.1
+aiohttp>=3.9
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+pytest>=8
+pytest-asyncio>=0.23

@@ -36,8 +36,11 @@ def check(entry: DraftEntry, rules: Rules, fixed: list[Block]) -> str | None:
     return None
 
 
-def validate(entries: list[DraftEntry], rules: Rules, fixed: list[Block] = ()) -> tuple[list[DraftEntry], list[dict[str, Any]]]:
-    """(valid entries in time order, [{entry, reason}] for the rest). Of two overlapping proposals the earlier one wins."""
+def validate(entries: list[DraftEntry], rules: Rules, fixed: list[Block] = (), task_ids: set[int] | None = None) -> tuple[list[DraftEntry], list[dict[str, Any]]]:
+    """(valid entries in time order, [{entry, reason}] for the rest). Of two overlapping proposals the earlier one wins.
+    With `task_ids` (the tasks that were offered), a block linked to any other task keeps its title but loses the link,
+    and a task gets at most one block."""
+    linked: set[int] = set()
     valid: list[DraftEntry] = []
     rejected: list[dict[str, Any]] = []
 
@@ -51,6 +54,10 @@ def validate(entries: list[DraftEntry], rules: Rules, fixed: list[Block] = ()) -
             reason = "too_many"
         if reason is None:
             entry.title = entry.title.strip()
+            if task_ids is not None and entry.task_id is not None and (entry.task_id not in task_ids or entry.task_id in linked):
+                entry.task_id = None
+            if entry.task_id is not None:
+                linked.add(entry.task_id)
             entry.start_at, entry.end_at = entry.start_at.astimezone(IST), entry.end_at.astimezone(IST)
             valid.append(entry)
         else:

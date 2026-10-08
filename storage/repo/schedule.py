@@ -9,8 +9,8 @@ COLUMNS = "id, title, start_at, end_at, created_at, updated_at, origin, edited_b
 
 
 CREATE_SCHEDULE_SQL = f"""
-    INSERT INTO schedule (title, start_at, end_at, origin)
-    VALUES (%s, %s, %s, %s)
+    INSERT INTO schedule (title, start_at, end_at, origin, task_id)
+    VALUES (%s, %s, %s, %s, %s)
     RETURNING {COLUMNS}
 """
 
@@ -20,6 +20,7 @@ LIST_SCHEDULE_RANGE_SQL = f"""
     FROM schedule
     WHERE start_at < %s
       AND end_at > %s
+      AND deleted_at IS NULL
     ORDER BY start_at ASC, id ASC
 """
 
@@ -29,6 +30,7 @@ CURRENT_AND_NEXT_SQL = f"""
     FROM schedule
     WHERE start_at <= %s
       AND end_at > %s
+      AND deleted_at IS NULL
     ORDER BY start_at ASC, id ASC
 """
 
@@ -37,6 +39,7 @@ NEXT_SCHEDULE_SQL = f"""
     SELECT {COLUMNS}
     FROM schedule
     WHERE start_at > %s
+      AND deleted_at IS NULL
     ORDER BY start_at ASC, id ASC
     LIMIT 1
 """
@@ -46,6 +49,7 @@ GET_FOR_UPDATE_SQL = f"""
     SELECT {COLUMNS}
     FROM schedule
     WHERE id = %s
+      AND deleted_at IS NULL
     FOR UPDATE
 """
 
@@ -117,10 +121,11 @@ async def create_schedule_entry(
     start_at: datetime,
     end_at: datetime,
     origin: str = "user",
+    task_id: int | None = None,
 ) -> dict[str, Any]:
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(CREATE_SCHEDULE_SQL, (title, start_at, end_at, origin))
+            await cur.execute(CREATE_SCHEDULE_SQL, (title, start_at, end_at, origin, task_id))
             entry = _row_to_dict(await cur.fetchone())
             await _log(cur, entry["id"], "create", None, entry)
 
@@ -201,7 +206,12 @@ async def delete_schedule_entry(
             if before_row is None:
                 return False
 
-            await cur.execute(DELETE_SCHEDULE_SQL, (schedule_id,))
+            await cur.execute("SELECT gcal_event_id FROM schedule WHERE id = %s", (schedule_id,))
+            if (await cur.fetchone())[0]:
+                # Mirrored on the calendar: keep the row (soft delete) until the next push removes the event.
+                await cur.execute("UPDATE schedule SET deleted_at = now() WHERE id = %s", (schedule_id,))
+            else:
+                await cur.execute(DELETE_SCHEDULE_SQL, (schedule_id,))
             await _log(cur, schedule_id, "delete", _row_to_dict(before_row), None)
 
     return True

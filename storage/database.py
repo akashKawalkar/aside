@@ -10,8 +10,9 @@ async def insert_connection(conn):
 
 def make_pool():
     return AsyncConnectionPool(
-        os.environ["DATABASE_URL"],
+        os.environ["DATABASE_URL"].strip(),
         open=False,
+        kwargs={"prepare_threshold": None},   # poolers (Supabase) can hand back a different backend: no server-side prepared statements
         min_size=1,
         max_size=4,
         configure=insert_connection,

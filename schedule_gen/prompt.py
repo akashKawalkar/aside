@@ -8,12 +8,13 @@ from llm.client import Message
 from schedule_gen.model import Rules
 
 SYSTEM = """You draft one day of a personal schedule for one person. Reply with ONE JSON object and nothing else:
-{{"entries": [{{"title": "...", "start": "HH:MM", "end": "HH:MM", "reason": "one short sentence"}}]}}
+{{"entries": [{{"title": "...", "start": "HH:MM", "end": "HH:MM", "reason": "one short sentence", "task_id": 12}}]}}
 
 Rules:
 - Times are 24-hour IST on {day}, between {wake_start} and {wake_end}.
 - Propose only blocks worth putting on a calendar: work blocks, workouts, appointments, recurring activities, anything the instructions ask for.
-- Do NOT add meals, sleep, commuting, breaks or filler. Do NOT make a block for each task; tasks are context only.
+- Do NOT add meals, sleep, commuting, breaks or filler.
+- Tasks are listed as "[task N] ...". Put the tasks that should be done on this day into blocks, most urgent first (overdue and postponed ones need a slot soon; a far-off deadline can wait). Choose each block's length from the task itself (a quick errand 15 minutes, a report a couple of hours) and its time from the user's usual rhythm. Set "task_id" to N on such a block, and leave it out on every other block. One block per task. Leave out tasks that can wait.
 - Each block is 15 minutes to 6 hours. Never overlap the "fixed" blocks or each other.
 - Obey the persistent file's constraints and the instructions. Use the weekday template as a guide to how this day usually looks, and drop or move what the instructions or candidate facts make impossible.
 - "reason" says why this block is there (for example "your usual weekday routine" or "you asked for it").

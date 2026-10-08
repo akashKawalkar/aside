@@ -116,3 +116,16 @@ def evaluate_tasks(
         lifecycle.evaluate(task, now=now)
         for task in tasks
     ]
+
+
+STALE_AFTER = timedelta(days=4)
+MAX_SLIPS = 2
+
+
+def stale_reason(due_at: datetime | None, slip_count: int, now: datetime) -> str | None:
+    """Why a pending task should be dropped (cloud plan section 2), or None. Dropped, not lingering."""
+    if slip_count >= MAX_SLIPS:
+        return f"postponed {slip_count} times"
+    if due_at is not None and now - due_at > STALE_AFTER:
+        return f"overdue by more than {STALE_AFTER.days} days"
+    return None

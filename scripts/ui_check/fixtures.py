@@ -26,7 +26,12 @@ async def _purge(pool, *, with_logs: bool) -> None:
             await cur.execute("DELETE FROM schedule_log WHERE after->>'title' LIKE 'zz%' OR before->>'title' LIKE 'zz%'")
             await cur.execute("DELETE FROM schedule WHERE title LIKE 'zz%'")
             await cur.execute("DELETE FROM instruction_records WHERE text LIKE 'zz%'")
-            if with_logs:                                       # rows written by the fake model's approvals
+            await cur.execute("DELETE FROM statements WHERE text LIKE 'zz%'")
+            await cur.execute("DELETE FROM notes WHERE text LIKE 'zz%'")
+            await cur.execute("DELETE FROM task_log WHERE snapshot->>'text' LIKE 'zz%'")
+            await cur.execute("DELETE FROM task_due_log WHERE task_id IN (SELECT id FROM tasks WHERE text LIKE 'zz%')")
+            await cur.execute("DELETE FROM tasks WHERE text LIKE 'zz%'")
+            if with_logs:                                       # rows written by the fake model's calls
                 await cur.execute("DELETE FROM llm_trace WHERE model = 'fake-gen'")
                 await cur.execute("DELETE FROM compile_log WHERE model = 'fake-gen'")
 

@@ -17,24 +17,7 @@ INSERT_SQL = """
     RETURNING id, text, tags, source, created_at, embedding_status
 """
 
-SEARCH_SQL = """
-    SELECT
-        id,
-        text,
-        tags,
-        source,
-        created_at,
-        CASE
-            WHEN text ILIKE %s THEN 'text'
-            WHEN tags::text ILIKE %s THEN 'tag'
-            ELSE NULL
-        END AS match
-    FROM notes
-    WHERE text ILIKE %s
-       OR tags::text ILIKE %s
-    ORDER BY created_at DESC
-    LIMIT %s
-"""
+
 PENDING_EMBEDDINGS_SQL = """
     SELECT
         id,
@@ -116,7 +99,12 @@ async def search_notes(
     pool,
     query: str,
     limit: int = 10,
+    *,
+    match_any: bool = False,
 ) -> list[dict[str, Any]]:
+    """Keyword search over text and tags. Default: every word must appear (the search box narrows as you type).
+    `match_any=True` is for natural-language questions used as context: any word of 3+ letters may match, and notes
+    matching more words come first."""
     if not isinstance(query, str):
         raise TypeError("query must be a string")
 
@@ -128,21 +116,31 @@ async def search_notes(
     if limit <= 0:
         return []
 
-    query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{query}%"
+    raw = [w for w in query.split() if len(w) >= 3] if match_any else query.split()
+    words = [w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") for w in raw]
+    if not words:
+        return []
+
+    patterns = [f"%{w}%" for w in words]
+    hit = "(text ILIKE %s OR tags::text ILIKE %s)"
+    where_sql = f" {'OR' if match_any else 'AND'} ".join([hit] * len(patterns))
+    score_sql = " + ".join([f"(CASE WHEN {hit} THEN 1 ELSE 0 END)"] * len(patterns))
+    match_sql = "CASE WHEN " + " OR ".join(["text ILIKE %s"] * len(patterns)) + " THEN 'text' ELSE 'tag' END"
+
+    search_sql = f"""
+        SELECT id, text, tags, source, created_at, {match_sql} AS match
+        FROM notes
+        WHERE {where_sql}
+        ORDER BY {score_sql} DESC, created_at DESC
+        LIMIT %s
+    """
+
+    pair = [p for p in patterns for _ in (0, 1)]
+    params = [*patterns, *pair, *pair, limit]
 
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(
-                SEARCH_SQL,
-                (
-                    pattern,
-                    pattern,
-                    pattern,
-                    pattern,
-                    limit,
-                ),
-            )
+            await cur.execute(search_sql, tuple(params))
 
             rows = await cur.fetchall()
 

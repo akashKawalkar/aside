@@ -1,0 +1,128 @@
+.env
+data/
+.venv/
+__pycache__/
+
+
+logs/
+# Secrets / environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build / generated files
+dist/
+build/
+*.log
+
+# Local / temporary data
+backups/
+data/
+logs/
+scratch_spool/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated project maps / dumps
+codemap.json
+codemap.py
+code_dump.py
+code_dump.txt
+llmmap.py
+llmmap.txt
+map.json
+shrunk2.json
+
+# Temporary scripts
+scratch_*.py
+patch_*.py
+
+# Ignore everything by default
+*
+
+# Allow Git to enter these directories, and everything inside them
+!.github/
+!.github/**
+!alembic/
+!alembic/**
+!capture/
+!capture/**
+!cloud/
+!cloud/**
+!config/
+!config/**
+!context/
+!context/**
+!docs/
+!docs/**
+!evals/
+!evals/**
+!extension1/
+!extension1/**
+!extractor/
+!extractor/**
+!gcal/
+!gcal/**
+!knowledge/
+!knowledge/**
+!llm/
+!llm/**
+!patterns/
+!patterns/**
+!review/
+!review/**
+!schedule_gen/
+!schedule_gen/**
+!scripts/
+!scripts/**
+!sessions/
+!sessions/**
+!storage/
+!storage/**
+!tests/
+!tests/**
+
+# Allow these root-level files
+!.gitignore
+!.env.example
+!ASIDE_PLAN.md
+!README.md
+!alembic.ini
+!config.py
+!config.toml
+!pyproject.toml
+!requirements.txt
+!requirements-action.txt
+!run_server.py
+!seed_skills.py
+!supervisor.py
+
+# But never allow secrets / environments / caches
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

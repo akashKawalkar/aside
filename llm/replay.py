@@ -21,14 +21,14 @@ class ReplayResult:
     only_in_replay: list[str]      # ids this recipe packs that the stored compile did not
 
 
-def replay_compile(stored: dict[str, Any], recipe: Recipe, profile: ModelProfile, *, now: datetime | None = None) -> ReplayResult:
+async def replay_compile(stored: dict[str, Any], recipe: Recipe, profile: ModelProfile, *, now: datetime | None = None) -> ReplayResult:
     """`stored` is a compile_log row. Items are rebuilt from the logged offer, so no live data is read;
     the same instant (`ts`) is used for validity windows unless `now` is given."""
     now = now or stored["ts"]
     items = [Item.from_dict(d) for d in stored["offered"]]
     situation = Situation(name=stored["situation"], query=stored.get("query") or "")
 
-    selected, not_selected = make_selector(recipe.selector).select(items, situation)
+    selected, not_selected = await make_selector(recipe.selector).select(items, situation)
     result = pack(selected, recipe, profile, now=now)
     result.dropped = [*not_selected, *result.dropped]
 

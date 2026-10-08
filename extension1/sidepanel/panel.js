@@ -10,8 +10,6 @@ import {
   updateTask,
   getMonitoring,
   checkHealth,
-  approveLLMCall,
-  rejectLLMCall,
 } from "../shared/api.js";
 import { localDestination, queueableDestination } from "../shared/routing.js";
 import { h } from "../shared/ui/dom.js";
@@ -21,7 +19,7 @@ import { showSnackbar } from "../shared/ui/snackbar.js";
 import { openPopover } from "../shared/ui/popover.js";
 import { openDuePicker } from "../shared/ui/datetime-field.js";
 import { createEventEditor } from "../shared/ui/event-editor.js";
-import { createApprovalCard } from "../shared/ui/approval-card.js";
+import { noteLines } from "../shared/ui/reply-notes.js";
 import { createDraftSection } from "../shared/ui/schedule-draft.js";
 import { formatTimeRange, relativeDue, toIsoOffset } from "../shared/ui/datetime-utils.js";
 
@@ -485,17 +483,18 @@ function appendChatTurn(role, content) {
   return row;
 }
 
-function appendApprovalTurn(preview, pendingId) {
-  const card = createApprovalCard({
-    preview,
-    pendingId,
-    approve: approveLLMCall,
-    reject: rejectLLMCall,
-    title: "Model:",
-    onBusy: (busy) => busy && setRing("spinning"),
-    onEnvelope: applyEnvelopeToRing,
-  });
-  appendChatTurn("agent", card);
+/** Notes found by `find:` (a local lookup: no model is called, nothing is saved). */
+function renderFoundNotes(notes) {
+  if (!notes.length) return "No matching notes.";
+  return h(
+    "div",
+    { class: "find-results" },
+    notes.map((n) => {
+      const when = n.created_at ? new Date(n.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+      const meta = [when, ...(n.tags ?? [])].filter(Boolean).join(" · ");
+      return h("div", { class: "find-note" }, h("div", { class: "find-note-text" }, n.text), meta ? h("div", { class: "find-note-meta" }, meta) : null);
+    })
+  );
 }
 
 // ---------- mode (sticky until the panel closes) ----------
@@ -636,17 +635,15 @@ async function handleSend(key = "enter") {
 
     if (destination === "chat_llm" || destination === "chat_script") {
       appendChatTurn("user", text);
-      if (envelope.data?.approval_required && envelope.data?.preview) {
-        appendApprovalTurn(envelope.data.preview, envelope.data.pending_id);
-      } else {
-        appendChatTurn(
-          "agent",
-          envelope.data?.reply ??
-            (envelope.data?.fallback
-              ? "Chat isn't wired up yet, so I saved that as a note."
-              : "(no reply)")
-        );
-      }
+      const reply =
+        envelope.data?.reply ??
+        (envelope.data?.fallback ? "Chat isn't wired up yet, so I saved that as a note." : "(no reply)");
+      const notes = noteLines(envelope.data);
+      appendChatTurn("agent", notes.length ? h("div", { class: "reply-with-notes" }, reply, ...notes) : reply);
+    }
+    if (destination === "find") {
+      appendChatTurn("user", text);
+      appendChatTurn("agent", renderFoundNotes(envelope.data?.notes ?? []));
     }
     // Task / schedule / note destinations never enter the thread.
 
@@ -664,7 +661,7 @@ async function handleSend(key = "enter") {
 
 function offlineMessage(text, mode) {
   const destination = localDestination(text, mode);
-  const what = destination === "schedule" ? "Schedule entries" : "Chat";
+  const what = destination === "schedule" ? "Schedule entries" : destination === "find" ? "Note search" : "Chat";
   return `Can't reach the local service. ${what} need it to work, so nothing was saved.`;
 }
 

@@ -1,13 +1,11 @@
 // shared/ui/schedule-draft.js — "Draft tomorrow": ask for a draft, read the prompt, approve it, then accept / edit /
 // discard the proposed blocks one by one or all at once (plan 3.6). One component for the side panel and settings.
 //
-// It stays out of the way: with nothing to offer it renders nothing at all. A model-made draft is only ever sent after
-// the user approves the exact prompt; the rule-based draft makes no model call.
+// It stays out of the way: with nothing to offer it renders nothing at all. The rule-based draft makes no model call.
 import {
-  acceptDraft, approveLLMCall, discardDraft, generateDraft, getDraftStatus, patchDraftEntry, placeholderDraft,
-  rejectLLMCall, reviseDraft,
+  acceptDraft, discardDraft, generateDraft, getDraftStatus, patchDraftEntry, placeholderDraft, reviseDraft,
 } from "../api.js";
-import { createApprovalCard } from "./approval-card.js";
+import { noteLines } from "./reply-notes.js";
 import { formatTimeRange, toIsoOffset } from "./datetime-utils.js";
 import { h } from "./dom.js";
 import { createEventEditor } from "./event-editor.js";
@@ -24,7 +22,7 @@ import { showSnackbar } from "./snackbar.js";
  */
 export function createDraftSection({ showReasons = false, onScheduleChanged, onBusy, onEnvelope, onVisible } = {}) {
   const el = h("div", { class: "draft-section", hidden: true });
-  let view = "empty"; // empty | link | form | approval | draft | revise
+  let view = "empty"; // empty | link | form | draft | revise
   let current = null;
 
   const fail = (envelope) => showSnackbar(envelope.detail || envelope.message || "Something went wrong.");
@@ -34,6 +32,18 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
     const envelope = await promise;
     onBusy?.(false);
     onEnvelope?.(envelope);
+    return envelope;
+  }
+
+  /** Run a model call, showing the wait on `btn` (replies take seconds, but can stall for a minute or more when the service is busy). */
+  async function withWait(btn, label, promise) {
+    const idle = btn.textContent, started = Date.now();
+    const tick = () => (btn.textContent = `${label} ${Math.round((Date.now() - started) / 1000)}s`);
+    tick();
+    const timer = setInterval(tick, 1000);
+    const envelope = await call(promise);
+    clearInterval(timer);
+    btn.textContent = idle;
     return envelope;
   }
 
@@ -53,8 +63,8 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
   // ---------- states ----------
 
   async function refresh({ force = false } = {}) {
-    // Never wipe something the user is in the middle of (a typed instruction, a prompt waiting for approval, an editor).
-    if (!force && (["form", "approval", "revise"].includes(view) || el.querySelector(".event.editing"))) return;
+    // Never wipe something the user is in the middle of (a typed instruction, an editor).
+    if (!force && (["form", "revise"].includes(view) || el.querySelector(".event.editing"))) return;
 
     const envelope = await getDraftStatus();
     if (envelope.status !== "ok") return show(null, "empty"); // an older server or none at all: say nothing
@@ -76,7 +86,7 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
       type: "text", maxlength: "500", "aria-label": "Instruction for tomorrow's draft",
       placeholder: "Anything to know about tomorrow? (optional)",
     });
-    const go = button("filled", "Prepare draft", null, { disabled: !state.llm_available });
+    const go = button("filled", "Draft with model", null, { disabled: !state.llm_available });
     const rule = button("outlined", "Rule-based draft", null);
     const cancel = button("text", "Cancel", () => refresh({ force: true }));
     const controls = [input, go, rule, cancel];
@@ -84,12 +94,12 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
 
     go.onclick = async () => {
       lock(true);
-      const envelope = await call(generateDraft(input.value.trim()));
+      const envelope = await withWait(go, "Drafting…", generateDraft(input.value.trim()));
       if (envelope.status === "error") {
         fail(envelope);
         return lock(false);
       }
-      renderApproval(envelope.data);
+      renderDraft(envelope.data.draft, envelope.data);
     };
     rule.onclick = async () => {
       lock(true);
@@ -115,37 +125,13 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
           "div",
           { class: "draft-hint" },
           state.llm_available
-            ? "Nothing is sent until you approve the prompt. The rule-based draft makes no model call."
+            ? "The model sees tomorrow's tasks and your usual routine. The rule-based draft makes no model call."
             : "The daily model-call cap is used up. The rule-based draft needs no model call."
         )
       ),
       "form"
     );
     input.focus();
-  }
-
-  function renderApproval(data) {
-    const card = createApprovalCard({
-      preview: data.preview,
-      pendingId: data.pending_id,
-      approve: approveLLMCall,
-      reject: rejectLLMCall,
-      title: "Draft with",
-      onBusy,
-      onEnvelope,
-      onApproved: (resp) => {
-        const draft = resp.data?.result?.draft;
-        if (draft) renderDraft(draft);
-        else refresh({ force: true });
-      },
-      onFailed: (resp, node) =>
-        node.replaceChildren(
-          h("div", { class: "approval-meta" }, icon("error"), resp.message || resp.detail || "That did not work."),
-          h("div", { class: "approval-actions" }, button("text", "Back", () => refresh({ force: true })))
-        ),
-      onRejected: () => refresh({ force: true }),
-    });
-    show(card, "approval");
   }
 
   // ---------- an open draft ----------
@@ -247,7 +233,7 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
     return li;
   }
 
-  function renderDraft(draft) {
+  function renderDraft(draft, reply = null) {
     current = draft;
     const dayLabel = new Date(`${draft.target_day}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
     const visible = draft.entries.filter((e) => e.state !== "discarded");
@@ -260,6 +246,7 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
         visible.length
           ? h("ul", { class: "draft-list" }, visible.map((e, i) => entryRow(e, i)))
           : h("div", { class: "draft-note" }, "Nothing worth scheduling was proposed."),
+        ...(reply ? noteLines(reply) : []),
         showReasons && dropped ? h("div", { class: "draft-note" }, `${dropped} proposed block${dropped === 1 ? " was" : "s were"} dropped by the checks (see Drafts).`) : null,
         h(
           "div",
@@ -275,19 +262,19 @@ export function createDraftSection({ showReasons = false, onScheduleChanged, onB
 
   function renderRevise(draft) {
     const input = h("input", { type: "text", maxlength: "500", "aria-label": "How should the draft change?", placeholder: "How should it change? e.g. keep the evening free" });
-    const send = button("filled", "Prepare revision", null);
+    const send = button("filled", "Revise with model", null);
     const cancel = button("text", "Cancel", () => renderDraft(draft));
 
     send.onclick = async () => {
       const text = input.value.trim();
       if (!text) return input.focus();
       [input, send, cancel].forEach((c) => (c.disabled = true));
-      const envelope = await call(reviseDraft(draft.id, text));
+      const envelope = await withWait(send, "Revising…", reviseDraft(draft.id, text));
       if (envelope.status === "error") {
         fail(envelope);
         return [input, send, cancel].forEach((c) => (c.disabled = false));
       }
-      renderApproval(envelope.data);
+      renderDraft(envelope.data.draft, envelope.data);
     };
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") send.click();

@@ -4,10 +4,10 @@
 // This mirrors capture/router.py and exists for one purpose: deciding, while
 // the server is unreachable, whether a message is safe to hold and send later.
 
-const TRIGGERS = { "note:": "note", "task:": "task", "schedule:": "schedule", "wrong:": "wrong" };
+const TRIGGERS = { "note:": "note", "find:": "find", "task:": "task", "schedule:": "schedule", "wrong:": "wrong" };
 const MODE_DESTINATIONS = new Set(["task", "schedule", "note"]);
 
-/** "note" | "task" | "schedule" | "chat", or null for empty input. */
+/** "note" | "find" | "task" | "schedule" | "chat", or null for empty input. */
 export function localDestination(text, mode) {
   let t = String(text ?? "").trimStart();
   if (!t) return null;

@@ -17,8 +17,12 @@ from storage.repo.tasks import (
     complete_task,
     delete_task,
     update_task,
+    restore_task,
     expire_tasks,
+    drop_stale_tasks,
+    list_pending_with_slips,
     list_task_log,
+    list_task_due_changes,
 )
 from storage.repo.schedule import (
     create_schedule_entry,
@@ -37,6 +41,12 @@ from storage.repo.review import (
     count_notes,
     list_tasks_due,
 )
+from storage.repo.job_run import insert_job_run, list_job_runs, step_done
+from storage.repo.gcal import (
+    apply_calendar_change, drop_task, get_entry, get_entry_by_gcal_id, insert_synced_entry, insert_task_from_google,
+    list_sync_entries, list_task_sync_rows, set_task_gtask, soft_delete_from_calendar, touch_synced,
+)
+from storage.repo.review_state import get_review_state, set_review_state
 from storage.repo.compile_log import insert_compile_log, get_compile_log, list_compile_logs
 from storage.repo.statements import insert_instruction_record, list_candidate_items, list_instruction_records
 from storage.repo.schedule_drafts import (
@@ -52,16 +62,21 @@ from storage.repo.data_quality import (
     save_day_record,
     days_with_snapshot,
     get_schedule_snapshot,
+    list_day_records,
     days_with_day_record,
     insert_mark_wrong,
     session_bounds,
     last_day_record,
 )
+from storage.repo.statements import insert_statement
+from storage.repo.observations import list_observations, upsert_observation, mark_observation_deleted
 from storage.repo.retention import prune
 __all__ = [
     "insert_monitoring_log", "list_monitoring_log", "insert_heartbeat_log", "list_heartbeats",
-    "save_schedule_snapshot", "save_day_record", "days_with_snapshot", "get_schedule_snapshot", "days_with_day_record",
+    "save_schedule_snapshot", "save_day_record", "days_with_snapshot", "get_schedule_snapshot", "list_day_records", "days_with_day_record",
     "insert_mark_wrong", "prune", "session_bounds", "last_day_record",
+    "insert_statement",
+    "list_observations", "upsert_observation", "mark_observation_deleted",
     "insert_compile_log",
     "get_compile_log",
     "list_compile_logs",
@@ -96,8 +111,12 @@ __all__ = [
     "complete_task",
     "delete_task",
     "update_task",
+    "restore_task",
     "expire_tasks",
+    "drop_stale_tasks",
+    "list_pending_with_slips",
     "list_task_log",
+    "list_task_due_changes",
     "fetch_events_range",
     "save_sessions",
     "list_sessions_range",

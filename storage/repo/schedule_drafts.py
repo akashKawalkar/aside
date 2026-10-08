@@ -116,11 +116,11 @@ async def accept_entries(pool, draft_id: int, indexes: list[int]) -> dict[str, A
                 if not 0 <= index < len(entries) or entries[index].state != PENDING:
                     continue
                 e = entries[index]
-                await cur.execute("SELECT 1 FROM schedule WHERE start_at < %s AND end_at > %s LIMIT 1", (e.end_at, e.start_at))
+                await cur.execute("SELECT 1 FROM schedule WHERE start_at < %s AND end_at > %s AND deleted_at IS NULL LIMIT 1", (e.end_at, e.start_at))
                 if await cur.fetchone():
                     conflicts.append(index)
                     continue
-                await cur.execute(CREATE_SCHEDULE_SQL, (e.title, e.start_at, e.end_at, "generated"))
+                await cur.execute(CREATE_SCHEDULE_SQL, (e.title, e.start_at, e.end_at, "generated", e.task_id))
                 created = _row_to_dict(await cur.fetchone())
                 await _log(cur, created["id"], "create", None, created)
                 e.state, e.locked, e.schedule_id = ACCEPTED, True, created["id"]

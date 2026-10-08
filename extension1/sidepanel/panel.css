@@ -60,8 +60,8 @@ body {
   overflow-y: auto;
 }
 
-/* While a draft is being read, approved or edited, the tiles get room for it (they still scroll). */
-#tiles:has(.approval-card, .draft-list, .draft-form) {
+/* While a draft is being read or edited, the tiles get room for it (they still scroll). */
+#tiles:has(.draft-list, .draft-form) {
   max-height: 72vh;
 }
 
@@ -401,10 +401,10 @@ body {
   color: var(--md-error);
 }
 
-/* The approval card itself lives in shared/ui/draft.css; in chat it just gets the full row width. */
-.chat-row.agent:has(.approval-card) .chat-turn {
-  max-width: 95%;
-  width: 100%;
+.reply-with-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 @keyframes msg-in {
@@ -880,4 +880,33 @@ body {
 
 :root {
   --snackbar-offset: 96px;
+}
+
+/* ---------- notes found by `find:` ---------- */
+
+.find-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.find-note {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+
+.find-note:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.find-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.find-note-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
 }

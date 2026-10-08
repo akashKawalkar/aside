@@ -274,6 +274,13 @@
   padding: 12px 12px 8px;
 }
 
+.due-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 4px 12px;
+}
+
 .due-picker .divider {
   margin: 8px 0;
 }

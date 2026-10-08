@@ -1,0 +1,17 @@
+[
+  {"id":"q01","category":"planning","question":"Help me choose the three most useful things to do this afternoon.","criteria":["asks for or states priorities","keeps the list to three items"]},
+  {"id":"q02","category":"planning","question":"I have 90 minutes free. Suggest a realistic way to use that time.","criteria":["fits within 90 minutes","suggests a concrete next step"]},
+  {"id":"q03","category":"planning","question":"Turn this goal into a small first step: finish a personal website.","criteria":["gives one actionable first step"]},
+  {"id":"q04","category":"recall","question":"What preference did I mention earlier in this conversation?","criteria":["uses only information in conversation or supplied memory","admits when no preference is available"]},
+  {"id":"q05","category":"uncertainty","question":"Which exact day did I say I would meet Mira?","criteria":["does not invent a date when none is supplied"]},
+  {"id":"q06","category":"writing","question":"Draft a polite two-sentence follow-up asking whether the proposal was reviewed.","criteria":["contains exactly two sentences","polite tone"]},
+  {"id":"q07","category":"writing","question":"Rewrite this to sound clearer: 'need that thing soon maybe'.","criteria":["preserves the request","does not invent a deadline"]},
+  {"id":"q08","category":"reflection","question":"I had a scattered day. Help me decide what to carry forward to tomorrow.","criteria":["non-judgmental tone","offers a small practical next step"]},
+  {"id":"q09","category":"tasking","question":"Make a checklist for preparing a simple weeknight dinner.","criteria":["checklist format","steps are practical"]},
+  {"id":"q10","category":"focus","question":"I keep switching between tasks. Suggest one way to focus for the next 25 minutes.","criteria":["suggestion fits 25 minutes","one clear approach"]},
+  {"id":"q11","category":"schedule","question":"Suggest a balanced weekday evening with one hour of exercise and time to unwind.","criteria":["includes one hour of exercise","leaves time to unwind"]},
+  {"id":"q12","category":"reasoning","question":"I can either start a small task now or plan it first. Help me choose.","criteria":["explains a simple decision rule","does not overstate certainty"]},
+  {"id":"q13","category":"memory","question":"What should you do if you are unsure whether a detail is correct?","criteria":["states uncertainty","asks rather than fabricating"]},
+  {"id":"q14","category":"planning","question":"I have three unfinished tasks and low energy. Help me pick one.","criteria":["offers a low-effort way to choose","does not assume task details"]},
+  {"id":"q15","category":"writing","question":"Give me a concise subject line for a message asking to move a meeting.","criteria":["provides a subject line","is concise"]}
+]

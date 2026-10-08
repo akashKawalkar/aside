@@ -1,0 +1,19 @@
+[
+  {
+    "id":"constraint_carryover",
+    "kind":"constraint",
+    "seed_turn":1,
+    "constraint":"For every reply, use no more than 20 words and do not use emoji.",
+    "checks":[5,10,15,20],
+    "prompt":"Give me one practical suggestion for staying focused today.",
+    "check_ids":["max_words_20","no_emoji"],
+    "session_boundary_before_checks":true
+  },
+  {
+    "id":"vegetarian_preference",
+    "kind":"cross_session",
+    "session_1":"I prefer vegetarian meals. Please remember that for future dinner suggestions.",
+    "session_2":"Suggest a simple dinner for tonight.",
+    "check_ids":["vegetarian","no_meat"]
+  }
+]

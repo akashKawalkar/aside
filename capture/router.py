@@ -12,6 +12,7 @@ Destination = Literal[
     "chat_llm",
     "chat_script",
     "wrong",
+    "find",
 ]
 
 Mode = Literal[
@@ -40,6 +41,7 @@ TRIGGERS = {
     "journal:": "journal_note",
     "task:": "task",
     "schedule:": "schedule",
+    "find:": "find",     # looks notes up locally (keyword + local embeddings); no model call, nothing saved
     "wrong:": "wrong",   # marks the previous reply wrong; the text after it is an optional reason
 }
 
@@ -89,6 +91,9 @@ def route(
                     reason="trigger",
                     error="Note text must not be empty.",
                 )
+
+            if destination == "find" and not content:
+                return RouteResult(destination=None, text="", reason="trigger", error="Say what to look for after find:.")
 
             return RouteResult(
                 destination=destination,

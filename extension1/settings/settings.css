@@ -909,3 +909,19 @@ body {
 .note-row .gt-main { flex: 1; min-width: 0; }
 .note-row .pf-chips { margin-top: 4px; }
 .note-row + .note-row { border-top: 1px solid var(--md-outline-variant); }
+
+.notes-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--shape-full);
+  background: var(--md-surface-container, transparent);
+  color: var(--md-on-surface);
+  font: inherit;
+}
+
+.notes-search:focus {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -1px;
+}

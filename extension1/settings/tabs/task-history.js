@@ -1,4 +1,4 @@
-// settings/tabs/task-history.js — completed, deleted and expired tasks as a timeline.
+// settings/tabs/task-history.js — completed, deleted, expired and dropped tasks as a timeline.
 import { getTaskHistory } from "../../shared/api.js";
 import { h } from "../../shared/ui/dom.js";
 import { icon } from "../../shared/ui/icons.js";
@@ -7,8 +7,8 @@ import { $, envelopeError, emptyState, showLoading } from "./_shared.js";
 
 const taskHistoryView = $("task-history-view");
 
-const HISTORY_ICONS = { completed: "check_circle", deleted: "delete", expired: "hourglass" };
-const HISTORY_LABELS = { completed: "Completed", deleted: "Deleted", expired: "Expired" };
+const HISTORY_ICONS = { completed: "check_circle", deleted: "delete", expired: "hourglass", dropped: "hourglass" };
+const HISTORY_LABELS = { completed: "Completed", deleted: "Deleted", expired: "Expired", dropped: "Dropped" };
 
 function dayHeading(day, now) {
   const diff = Math.round((startOfDay(now) - day) / 86_400_000);
@@ -28,7 +28,7 @@ export async function loadTaskHistory() {
 
   const items = envelope.data?.items ?? [];
   if (items.length === 0) {
-    taskHistoryView.replaceChildren(emptyState("history", "No completed, deleted or expired tasks yet."));
+    taskHistoryView.replaceChildren(emptyState("history", "No completed, deleted or dropped tasks yet."));
     return;
   }
 
@@ -48,6 +48,7 @@ export async function loadTaskHistory() {
 
     const snapshot = event.snapshot ?? {};
     const was = snapshot.due_at ? `Was due ${relativeDue(new Date(snapshot.due_at), now).text}` : "";
+    const why = snapshot.dropped_reason ?? "";
 
     list.append(
       h(
@@ -58,7 +59,7 @@ export async function loadTaskHistory() {
           "div",
           { class: "hist-body" },
           h("span", { class: "hist-text" }, snapshot.text || "(untitled)"),
-          h("span", { class: "hist-meta" }, [HISTORY_LABELS[event.action] ?? event.action, was].filter(Boolean).join(" · "))
+          h("span", { class: "hist-meta" }, [HISTORY_LABELS[event.action] ?? event.action, why, was].filter(Boolean).join(" · "))
         ),
         h("span", { class: "hist-time" }, formatTime(when))
       )

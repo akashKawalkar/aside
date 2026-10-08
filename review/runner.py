@@ -40,7 +40,7 @@ async def run_review_once(
     None when nothing was due.
     """
     now = now or datetime.now(generator.timezone)
-    settings = store.settings()
+    settings = await store.settings()
     today = now.date()
 
     hour, minute = map(int, settings.time.split(":"))
@@ -49,12 +49,12 @@ async def run_review_once(
     if not due <= now <= due + GRACE:
         return None
 
-    latest = store.latest()
+    latest = await store.latest()
     if latest and latest.get("date") == today.isoformat():
         return None
 
     review = await generator.generate(review_date=today)
-    store.save_latest(review)
+    await store.save_latest(review)
 
     first = _email_period(settings.frequency, today)
     if settings.email_enabled and settings.recipient and first is not None:

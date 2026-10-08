@@ -9,7 +9,7 @@ class CurrentSessionSource:
 
     async def fetch(self, situation: Situation) -> list[Item]:
         items = []
-        if situation.query:
+        if situation.query and not situation.extra.get("is_user_message"):
             items.append(Item(id="session:query", text=situation.query, source=self.name, priority=10,
                               provenance="user", core=True))
         for n, text in enumerate(situation.extra.get("session_text", [])):

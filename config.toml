@@ -1,0 +1,66 @@
+poll_interval = 1.0
+idle_threshold = 300.0
+
+max_chunk = 60.0
+
+spool_dir = "./data/spool"
+
+rotate_mb = 10
+rotate_minutes = 5
+
+title_blocklist_apps = [
+    # "SomePrivateApp"
+]
+[embeddings]
+model = "all-MiniLM-L6-v2"
+dimension = 384
+
+[retention]
+raw_events_days = 90
+past_schedule_days = 90
+compile_log_days = 180
+llm_trace_days = 180
+heartbeat_days = 400
+
+[data_quality]
+heartbeat_interval = 30.0
+heartbeat_sample_interval = 60.0
+heartbeat_stale_after = 90.0
+waking_start = "07:00"
+waking_end = "23:00"
+min_gap_minutes = 15
+snapshot_time = "23:55"
+day_record_after = "00:20"
+catchup_days = 7
+
+[memory]
+excitement = 1.0
+settle_days = 3
+cap_tokens = 1500
+evict_first = ["goals", "people"]
+note_similarity_cutoff = 0.40
+
+[llm]
+# Free-tier discipline (plan section 3.9). Conservative on purpose; raise after checking the AI Studio dashboard.
+daily_call_cap = 25
+background_enabled = false
+max_item_tokens = 500
+attempt_timeout = 45       # seconds ONE attempt waits (max 60: two attempts must finish inside the extension's 130 s)
+fallback_model = "gemini-3.1-flash-lite"   # tried once if the chosen model is overloaded or silent; "" disables
+
+[patterns]
+lookback_days = 90
+min_occurrences = 3
+question_after_misses = 2
+drop_after_misses = 3
+max_observations = 3
+focus_hour_min_seconds = 1800
+low_intentional_seconds = 1800
+
+[cloud]
+nightly_in_action = false   # the Action sets AGENT_NIGHTLY_IN_ACTION=1 itself; set true here once it owns the nightly job
+retry_attempts = 2
+
+[privacy]
+deny_sources = []
+deny_tags = ["journal"]

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from storage.models import Base
 
+_sql_text = text
+
 
 class PersistentEntryRow(Base):
     """One fact in the persistent file. The six schema fields (context/persistent_schema.py) plus bookkeeping."""
@@ -148,6 +150,24 @@ class DayRecordRow(Base):
     data: Mapped[dict] = mapped_column(JSONB, nullable=False)
     late: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ObservationRow(Base):
+    __tablename__ = "observations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    observation_key: Mapped[str] = mapped_column(String(240), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, server_default="candidate")
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    misses: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    first_seen: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    last_seen: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    last_evaluated_day: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    evidence: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=_sql_text("'{}'::jsonb"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MarkWrongLogRow(Base):

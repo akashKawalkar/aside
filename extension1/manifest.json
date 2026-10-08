@@ -15,11 +15,11 @@
   "action": {},
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Ctrl+Shift+A" },
+      "suggested_key": { "default": "Alt+Shift+A" },
       "description": "Open panel and focus input"
     },
     "toggle-monitoring": {
-      "suggested_key": { "default": "Ctrl+Shift+M" },
+      "suggested_key": { "default": "Alt+Shift+M" },
       "description": "Pause or resume monitoring without opening the panel"
     },
     "open-note": {

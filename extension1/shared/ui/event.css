@@ -143,3 +143,8 @@
 .event.editing .dt-input {
   background: var(--md-surface-highest);
 }
+
+.event-badge.generated {
+  color: var(--md-on-surface-variant);
+  border: 1px solid var(--md-outline-variant);
+}

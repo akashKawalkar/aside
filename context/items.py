@@ -23,6 +23,7 @@ class Item:
     situations: tuple[str, ...] = () # empty = relevant everywhere; else only these situations (rules selector)
     descriptor: str = ""             # short label the (future) LLM selector may see instead of the text
     group: str | None = None         # sub-heading within its source (a persistent-file section, a skill's name); render() owns formatting
+    tags: tuple[str, ...] = ()       # metadata for filtering (e.g. privacy layer)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

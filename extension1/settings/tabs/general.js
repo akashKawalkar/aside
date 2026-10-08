@@ -1,11 +1,32 @@
 // settings/tabs/general.js — the monitoring switch.
-import { getMonitoring } from "../../shared/api.js";
+import { getMonitoring, getPrivacy } from "../../shared/api.js";
+import { h } from "../../shared/ui/dom.js";
 import { showSnackbar } from "../../shared/ui/snackbar.js";
-import { $ } from "./_shared.js";
+import { $, envelopeError } from "./_shared.js";
 
 const monitoringToggle = $("toggle-monitoring");
 
+const list = (items) => (items.length ? items.join(", ") : "none");
+
+async function loadPrivacy() {
+  const view = $("privacy-view");
+  const res = await getPrivacy();
+  if (res.status !== "ok") {
+    view.replaceChildren(h("div", { class: "supporting" }, `Couldn't load: ${envelopeError(res)}`));
+    return;
+  }
+  const p = res.data;
+  const row = (label, value) => h("div", { class: "supporting" }, `${label}: ${value}`);
+  view.replaceChildren(
+    row("Never sent (sources)", list(p.deny_sources)),
+    row("Never sent (tags)", list(p.deny_tags)),
+    row("Unattended model calls", p.background_enabled ? "on" : "off"),
+    row("Model calls today", `${p.calls_today} of ${p.daily_call_cap}`)
+  );
+}
+
 export async function loadGeneralSettings() {
+  loadPrivacy();
   const state = await getMonitoring();
   if (state.status === "ok") {
     monitoringToggle.checked = state.data.enabled;

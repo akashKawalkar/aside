@@ -66,5 +66,8 @@ def parse_entries(text: str, day: date) -> tuple[list[DraftEntry], list[dict[str
             rejected.append({"entry": {k: str(v)[:200] for k, v in item.items()}, "reason": "unreadable_entry"})
             continue
         reason = item.get("reason")
-        entries.append(DraftEntry(title=title, start_at=start, end_at=end, reason=reason.strip() if isinstance(reason, str) else ""))
+        task_id = item.get("task_id")
+        task_id = task_id if isinstance(task_id, int) and not isinstance(task_id, bool) else None
+        entries.append(DraftEntry(title=title, start_at=start, end_at=end, reason=reason.strip() if isinstance(reason, str) else "",
+                                  task_id=task_id))
     return entries, rejected

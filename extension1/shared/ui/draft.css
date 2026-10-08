@@ -1,15 +1,8 @@
-/* shared/ui/draft.css — the approval card and the schedule-draft section (side panel and settings). */
+/* shared/ui/draft.css — reply notes and the schedule-draft section (side panel and settings). */
 
-/* ---------- approval card ---------- */
+/* ---------- notes under a reply ---------- */
 
-.approval-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.approval-meta {
+.note-line {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -17,63 +10,16 @@
   color: var(--md-on-surface-variant);
 }
 
-.approval-meta svg {
+.note-line svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
 }
 
-.approval-context-details {
-  background: var(--md-surface);
-  border-radius: var(--shape-sm);
-  padding: 6px 8px;
-  font-size: 12px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.approval-context-details summary {
-  cursor: pointer;
-  font-weight: 500;
-  color: var(--md-primary);
-  user-select: none;
-}
-
-.approval-context-pre {
-  margin: 6px 0 0;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--md-on-surface-variant);
-}
-
-.approval-actions {
+.note-actions {
   display: flex;
   gap: 8px;
   margin-top: 4px;
-}
-
-.approval-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: var(--shape-full);
-  border: 1px solid var(--md-outline);
-  background: transparent;
-  color: var(--md-on-surface);
-  cursor: pointer;
-}
-
-.approval-btn.approve {
-  background: var(--md-primary);
-  color: var(--md-on-primary);
-  border-color: var(--md-primary);
-}
-
-.approval-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 /* ---------- schedule draft ---------- */

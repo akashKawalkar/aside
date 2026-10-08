@@ -1,0 +1,21 @@
+[
+  {
+    "name": "Write short emails",
+    "content": "When drafting an email, always keep it under 5 sentences. Use bullet points if necessary. Do not include a formal sign-off.",
+    "tags": ["email", "writing"],
+    "metadata": {}
+  },
+  {
+    "name": "Format meeting notes",
+    "content": "Format meeting notes with three sections: 1. Attendees, 2. Key Decisions, 3. Action Items (with assignees and due dates).",
+    "tags": ["meeting", "notes"],
+    "metadata": {}
+  },
+  {
+    "name": "Summarize articles",
+    "content": "When asked to summarize an article, provide a 1-sentence tl;dr at the top, followed by 3 key takeaways.",
+    "tags": ["reading", "summary"],
+    "metadata": {}
+  }
+]
+

@@ -1,0 +1,41 @@
+# The nightly brain: pull Calendar/Tasks, sessionize, day record, extract, patterns, draft tomorrow, push Calendar, review.
+# Everything personal lives in the database and in the repository secrets; this repository holds only code.
+name: nightly
+
+on:
+  schedule:
+    - cron: "15 15 * * *"   # 20:45 IST: the evening run (tomorrow's schedule)
+    - cron: "0 2 * * *"     # 07:30 IST: the morning retry (today's schedule, a no-op if one exists)
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "nightly (tomorrow), morning_retry (today) or manual"
+        default: nightly
+        type: choice
+        options: [nightly, morning_retry, manual]
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-action.txt
+      - run: pip install -r requirements-action.txt
+      - name: Run the nightly job
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AGENT_BACKGROUND_ENABLED: "1"
+          AGENT_NIGHTLY_IN_ACTION: "1"
+          TZ: UTC
+          KIND: ${{ github.event.inputs.kind || (github.event.schedule == '0 2 * * *' && 'morning_retry') || 'nightly' }}
+        run: python -m cloud "$KIND"

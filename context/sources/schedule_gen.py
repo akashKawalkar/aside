@@ -78,14 +78,20 @@ class CandidatesSource(_GenSource):
 
 
 class ScheduleTasksSource(_GenSource):
-    """Tasks due by the end of the day. Context only: tasks are not time-blocked (plan 3.6)."""
+    """Pending tasks due by the end of the day, overdue ones included. The model time-blocks them and echoes the id."""
     name = "tasks"
 
     def items(self, inputs):
         out = []
         for n, t in enumerate(inputs.tasks):
             due = t["due_at"].astimezone(IST)
-            out.append(Item(id=f"task:{t['id']}", text=f"{t['text']} (due {due:%a %d %b %H:%M})", source=self.name, priority=-n,
+            notes = [f"due {due:%a %d %b %H:%M}"]
+            overdue = (inputs.rules.day - due.date()).days
+            if overdue > 0:
+                notes.append(f"overdue by {overdue} day{'s' if overdue != 1 else ''}")
+            if t.get("slip_count"):
+                notes.append(f"postponed {t['slip_count']}x")
+            out.append(Item(id=f"task:{t['id']}", text=f"[task {t['id']}] {t['text']} ({'; '.join(notes)})", source=self.name, priority=-n,
                             provenance=f"task:{t['id']}"))
         return out
 
@@ -100,8 +106,8 @@ class FreeSlotsSource(_GenSource):
         return [Item(id="free:slots", text=", ".join(f"{hhmm(a)}-{hhmm(b)}" for a, b in inputs.free), source=self.name)]
 
 
-def schedule_gen_sources(persistent_file: Any, empty: Any) -> dict[str, Any]:
-    """Every source the `schedule` recipe names. `persistent_file` is the shared real source; `empty` makes the stubs."""
+def schedule_gen_sources(persistent_file: Any, empty: Any, observations: Any | None = None) -> dict[str, Any]:
+    """Every source the `schedule` recipe names."""
     return {
         "persistent_file": persistent_file,
         "instructions": InstructionsSource(),
@@ -111,6 +117,6 @@ def schedule_gen_sources(persistent_file: Any, empty: Any) -> dict[str, Any]:
         "weekday_template": WeekdayTemplateSource(),
         "tasks": ScheduleTasksSource(),
         "free_slots": FreeSlotsSource(),
-        "observations": empty("observations"),
+        "observations": observations or empty("observations"),
         "history": empty("history"),
     }

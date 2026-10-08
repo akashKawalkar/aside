@@ -37,6 +37,7 @@ class DraftEntry:
     locked: bool = False
     edited: bool = False                  # the user changed it inside the draft
     schedule_id: int | None = None        # set once accepted: the schedule row it became
+    task_id: int | None = None            # the task this block is time-boxed for, if any
 
     def to_json(self) -> dict[str, Any]:
         d = asdict(self)
@@ -54,6 +55,7 @@ class DraftEntry:
             locked=bool(d.get("locked", False)),
             edited=bool(d.get("edited", False)),
             schedule_id=d.get("schedule_id"),
+            task_id=d.get("task_id"),
         )
 
 
