@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-action.txt
-      - name: Install (without torch: the embedder is imported lazily)
+      - name: Install (without torch - the embedder is imported lazily)
         run: |
           grep -v -i sentence-transformers requirements.txt > /tmp/requirements-ci.txt
           pip install -r /tmp/requirements-ci.txt -r requirements-action.txt httpx
