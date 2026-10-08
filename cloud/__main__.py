@@ -6,14 +6,20 @@ import logging
 import sys
 
 from cloud.nightly import STEPS, run_nightly
+from gcal import google_client
 from storage.database import make_pool
 
 
 async def main(kind: str) -> int:
     pool = make_pool()
     await pool.open(wait=True, timeout=30)
+    hooks = None
+    if google_client.configured():          # without Google credentials the calendar steps are recorded as skipped
+        from gcal.hooks import make_hooks
+
+        hooks = make_hooks(pool, google_client.GoogleCalendar(), google_client.GoogleTasks())
     try:
-        result = await run_nightly(pool, kind=kind)
+        result = await run_nightly(pool, kind=kind, hooks=hooks)
     finally:
         await pool.close()
     for step, outcome in result.steps.items():
