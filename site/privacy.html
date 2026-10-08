@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aside Privacy Policy</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; --line: #dadce0; --accent: #1a73e8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131316; --fg: #e8e8ea; --muted: #a0a3a8; --line: #2e2f34; --accent: #8ab4f8; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.8rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p, li { margin: 8px 0; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aside Privacy Policy</h1>
+  <p class="muted">Last updated: 8 October 2026</p>
+
+  <p>Aside is a personal assistant that its developer, <strong>[YOUR NAME]</strong>, builds and uses for their own personal use. It is not a commercial product and is not offered to the public. This policy explains what data Aside handles, in particular data it receives from your Google account when you sign in with Google.</p>
+
+  <h2>Who can use Aside</h2>
+  <p>Aside is a single-user application. The only account that is connected to it is the developer's own. No other person's Google data is requested or processed.</p>
+
+  <h2>Google user data Aside accesses</h2>
+  <p>When the developer signs in with Google, Aside asks for access to:</p>
+  <ul>
+    <li><strong>Google Calendar</strong>: to read the events on the user's own calendar and to create, change or delete events that make up the user's daily schedule.</li>
+    <li><strong>Google Tasks</strong>: to read, create, update and complete tasks on the user's own task lists, so tasks can be ticked off on the phone and shown in the schedule.</li>
+  </ul>
+  <p>Aside does not access Gmail, Drive, Contacts, or any other Google data.</p>
+
+  <h2>How the data is used</h2>
+  <p>Calendar and Tasks data is used only to display, synchronise and plan the user's own schedule and tasks. It is not used for advertising, profiling for advertising, or any purpose unrelated to this function. Aside's use of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including its Limited Use requirements, except as described in the next section.</p>
+
+  <h2>Where the data goes</h2>
+  <ul>
+    <li><strong>Supabase</strong> (database hosting): schedule entries, tasks, notes and activity records are stored in the developer's own Supabase project.</li>
+    <li><strong>GitHub</strong> (GitHub Actions): a scheduled job runs Aside's code. Credentials are held as encrypted GitHub secrets. No personal data is stored in the code repository.</li>
+    <li><strong>Google Gemini API</strong>: to generate the next day's schedule, Aside sends the model a text prompt that can contain schedule entry titles and times, task titles, and notes the user wrote. The Gemini API is used on a free tier, under which Google may use submitted content to improve its products. The developer knowingly accepts this for their own data. If you are ever a user other than the developer, this would not be acceptable and the setup would change.</li>
+  </ul>
+  <p>Data is not sold, rented or shared with any other third party, and no person other than the developer reads it.</p>
+
+  <h2>Storage, retention and security</h2>
+  <p>Data is kept until the developer deletes it. Access to the database is restricted to the developer's own login, and credentials are stored as secrets and never published. Activity data older than a configurable retention period (90 days by default) is removed.</p>
+
+  <h2>Revoking access and deleting data</h2>
+  <ul>
+    <li>Revoke Aside's access at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+    <li>After revoking, stored copies of Google Calendar and Tasks data can be deleted from the Supabase database.</li>
+  </ul>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top will be updated.</p>
+
+  <h2>Contact</h2>
+  <p>Questions: <strong>[YOUR CONTACT EMAIL]</strong></p>
+</main>
+</body>
+</html>

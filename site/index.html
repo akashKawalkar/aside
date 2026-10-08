@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aside</title>
+<meta name="description" content="Aside is a quiet personal assistant that plans the next day's schedule from your tasks, notes and activity.">
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; --line: #dadce0; --accent: #1a73e8; --card: #f6f7f9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131316; --fg: #e8e8ea; --muted: #a0a3a8; --line: #2e2f34; --accent: #8ab4f8; --card: #1b1c20; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 2.4rem; margin: 0; letter-spacing: -0.02em; }
+  .tag { color: var(--muted); font-size: 1.1rem; margin: 4px 0 24px; }
+  h2 { font-size: 1.15rem; margin: 36px 0 8px; }
+  p, li { margin: 8px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card strong { display: block; margin-bottom: 2px; }
+  .card span { color: var(--muted); font-size: 0.95rem; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aside</h1>
+  <p class="tag">A quiet personal assistant that plans tomorrow for you.</p>
+
+  <p>Aside is a personal project. It keeps track of tasks, notes and daily activity, and every evening it drafts the next day's schedule as time-boxed blocks in Google Calendar. It is built for one person's own use and is not offered to the public.</p>
+
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><strong>Captures</strong><span>Notes, journal entries and tasks from a laptop and a phone, with no friction.</span></div>
+    <div class="card"><strong>Plans</strong><span>Drafts tomorrow's schedule each evening, placing tasks in sensible time blocks.</span></div>
+    <div class="card"><strong>Syncs</strong><span>Keeps the schedule in Google Calendar and tasks in Google Tasks, so both can be edited anywhere.</span></div>
+    <div class="card"><strong>Reviews</strong><span>Compares what was planned with what happened and notices patterns over time.</span></div>
+  </div>
+
+  <h2>Principles</h2>
+  <ul>
+    <li><strong>Never in the way.</strong> No nagging; everything is visible, editable and undoable.</li>
+    <li><strong>The calendar is yours.</strong> A change you make in Google Calendar is treated as the plan.</li>
+    <li><strong>Your data stays yours.</strong> It lives in a private database and is used only to run the assistant.</li>
+  </ul>
+
+  <h2>Google account access</h2>
+  <p>When the owner signs in with Google, Aside requests access to Google Calendar and Google Tasks only, to show and synchronise the owner's own schedule and tasks. See the <a href="privacy.html">privacy policy</a> for details on what is accessed, how it is used and how to revoke it.</p>
+
+  <footer>
+    <a href="privacy.html">Privacy policy</a>
+    &nbsp;·&nbsp; <a href="https://github.com/[YOUR-GITHUB-USERNAME]/[REPO-NAME]">Source code</a>
+  </footer>
+</main>
+</body>
+</html>
