@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' https://*.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<title>Aside dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="login" class="login hidden">
+  <h1>Aside</h1>
+  <p>Your data, read-only. Sign in with the same login as the phone app.</p>
+  <form id="login-form">
+    <input id="email" type="email" placeholder="Email" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button class="btn" id="login-btn" type="submit">Sign in</button>
+    <div id="login-error" class="error"></div>
+  </form>
+  <p class="small muted" style="margin-top:22px"><a href="../">About</a> &nbsp;·&nbsp; <a href="../privacy.html">Privacy</a></p>
+</section>
+
+<div id="app" class="hidden">
+  <header class="top">
+    <div class="bar">
+      <h1>Aside</h1>
+      <div class="who"><span id="who"></span><button class="btn ghost" id="refresh" type="button">Refresh</button><button class="btn ghost" id="logout" type="button">Sign out</button></div>
+    </div>
+    <nav id="nav"></nav>
+  </header>
+  <main id="view"></main>
+</div>
+
+<noscript><p style="padding:20px">This page needs JavaScript.</p></noscript>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
