@@ -47,6 +47,25 @@ def _same(row: dict, event: CalEvent) -> bool:
     return row["title"] == event.title and row["start_at"] == event.start_at and row["end_at"] == event.end_at
 
 
+# ---------- which calendar the links belong to ----------
+
+async def forget_links_if_calendar_changed(pool, calendar: CalendarClient) -> bool:
+    """Event ids only mean something inside the calendar that issued them. When the sync is pointed at a different calendar
+    (the test one, then the real one), every stored link is cleared so rows are pushed fresh instead of failing with
+    "not found". Returns True when links were cleared."""
+    current = getattr(calendar, "calendar_id", "default")
+    state = await storage.get_review_state(pool, "gcal") or {}
+    if state.get("calendar_id") == current:
+        return False
+    # Also when nothing was recorded yet: links may have been made against another calendar. Clearing is harmless, because the
+    # pull re-adopts an existing event by the aside_id stored in it.
+    log.info("Google calendar is now %s (was %s): clearing stored event links", current, state.get("calendar_id"))
+    async with pool.connection() as conn:
+        await conn.execute("UPDATE schedule SET gcal_event_id = NULL, gcal_updated = NULL")
+    await storage.set_review_state(pool, "gcal", {"calendar_id": current})
+    return True
+
+
 # ---------- calendar ----------
 
 async def pull_events(pool, client: CalendarClient, *, start: datetime, end: datetime, now: datetime) -> SyncReport:
@@ -202,9 +221,15 @@ async def sync_tasks(pool, client: TasksClient, *, now: datetime) -> SyncReport:
 
 async def sync_all(pool, calendar: CalendarClient, tasks: TasksClient | None, *, now: datetime) -> dict[str, dict]:
     """Pull then push, for events and tasks. The nightly job's `calendar_pull` / `calendar_push` steps call the halves below."""
+    from gcal.lock import sync_lock
+
     start, end = default_window(now)
-    out = {"pull": (await pull_events(pool, calendar, start=start, end=end, now=now)).as_detail()}
-    if tasks is not None:
-        out["tasks"] = (await sync_tasks(pool, tasks, now=now)).as_detail()
-    out["push"] = (await push_events(pool, calendar, start=start, end=end, now=now)).as_detail()
-    return out
+    async with sync_lock(pool) as got:
+        if not got:
+            return {"skipped": "another sync is running"}
+        await forget_links_if_calendar_changed(pool, calendar)
+        out = {"pull": (await pull_events(pool, calendar, start=start, end=end, now=now)).as_detail()}
+        if tasks is not None:
+            out["tasks"] = (await sync_tasks(pool, tasks, now=now)).as_detail()
+        out["push"] = (await push_events(pool, calendar, start=start, end=end, now=now)).as_detail()
+        return out

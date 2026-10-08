@@ -60,6 +60,8 @@ low_intentional_seconds = 1800
 [cloud]
 nightly_in_action = false   # the Action sets AGENT_NIGHTLY_IN_ACTION=1 itself; set true here once it owns the nightly job
 retry_attempts = 2
+laptop_sync = true            # the server syncs Google Calendar/Tasks at start-up, every few minutes, and after edits
+laptop_sync_minutes = 5
 
 [privacy]
 deny_sources = []

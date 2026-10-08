@@ -66,6 +66,7 @@ from review.runner import run_review_worker
 from review.wiring import make_review_generator
 from review.store import DbBackend, ReviewSettings, ReviewStore
 from capture import llm_run
+from gcal.laptop import run_laptop_sync
 from capture.schedule_gen_routes import make_schedule_gen_router
 from extractor.worker import run_extractor_worker
 from patterns.job import run_pattern_worker
@@ -395,7 +396,10 @@ def create_app(
         await asyncio.to_thread(embedder.warm)
         embedding_task = asyncio.create_task(_run_note_embedding_worker(pool, embedder))
         expiry_task = asyncio.create_task(_run_task_expiry_worker(pool))
-        in_action = load_config().cloud.nightly_in_action     # the nightly Action owns review, daily record, patterns, extractor
+        cloud = load_config().cloud
+        app.state.sync_poke = asyncio.Event()
+        sync_task = asyncio.create_task(run_laptop_sync(pool, cloud.laptop_sync_minutes * 60, app.state.sync_poke)) if cloud.laptop_sync else None
+        in_action = cloud.nightly_in_action     # the nightly Action owns review, daily record, patterns, extractor
         review_task = None if in_action else asyncio.create_task(
             run_review_worker(app.state.review_generator, review_store)
         )
@@ -409,7 +413,7 @@ def create_app(
         try:
             yield
         finally:
-            workers = [t for t in (embedding_task, expiry_task, review_task, heartbeat_task, daily_task, pattern_task, extractor_task) if t]
+            workers = [t for t in (embedding_task, expiry_task, review_task, heartbeat_task, daily_task, pattern_task, extractor_task, sync_task) if t]
             for task in workers:
                 task.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
@@ -420,6 +424,15 @@ def create_app(
         redoc_url=None,
         lifespan = lifespan
     )
+
+    @app.middleware("http")
+    async def poke_google_sync(request, call_next):
+        """After anything that can change the schedule or tasks succeeds, ask the Google sync to run soon."""
+        response = await call_next(request)
+        poke = getattr(request.app.state, "sync_poke", None)
+        if poke is not None and request.method in ("POST", "PATCH", "DELETE") and response.status_code < 400                 and request.url.path.startswith(("/schedule", "/tasks", "/input")):
+            poke.set()
+        return response
 
     app.include_router(make_context_router(op_ok, op_error))
     app.include_router(make_data_router(op_ok, op_error))

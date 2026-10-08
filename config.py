@@ -72,6 +72,8 @@ class Cloud(BaseModel):
     """The nightly job runs in a scheduled GitHub Action instead of on the laptop (docs: the cloud plan)."""
     nightly_in_action: bool = False     # true: the laptop server skips the nightly workers (review, daily record, patterns, extractor)
     retry_attempts: int = Field(default=2, ge=1, le=3)   # model attempts for the schedule step inside one run (1 retry = 2)
+    laptop_sync: bool = True                             # the laptop server syncs Google Calendar/Tasks while it is on (needs Google credentials)
+    laptop_sync_minutes: float = Field(default=5.0, gt=0)
 
 
 class Config(BaseModel):
