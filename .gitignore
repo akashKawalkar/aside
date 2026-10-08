@@ -99,6 +99,8 @@ patch_*.py
 !sessions/**
 !storage/
 !storage/**
+!site/
+!site/**
 !tests/
 !tests/**
 
