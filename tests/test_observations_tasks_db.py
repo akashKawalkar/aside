@@ -131,6 +131,10 @@ async def test_extractor_worker_runs_in_a_background_grant_and_applies_privacy(a
         return real_create(inner=fake, **{**kw, "save_span": None})
 
     monkeypatch.setattr(worker, "create_client", gated_fake)
+    from config import Privacy, load_config
+    real_config = load_config()
+    real_config.privacy = Privacy(deny_tags=["journal"])          # the rule is tested explicitly: the shipped default may change
+    monkeypatch.setattr("extractor.job.load_config", lambda: real_config)
     now = datetime(2001, 1, 5, 3, 0, tzinfo=timezone.utc)
     assert await worker.run_extractor_once(pool, True, now=now) == 1
     sent = fake.calls[0].messages[1].content

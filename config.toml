@@ -63,4 +63,4 @@ retry_attempts = 2
 
 [privacy]
 deny_sources = []
-deny_tags = ["journal"]
+deny_tags = []   # journal allowed from 2026-10-08: the user accepted sending it to Gemini for a 3-month trial, then revisit

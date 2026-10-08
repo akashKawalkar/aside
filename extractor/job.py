@@ -57,7 +57,9 @@ async def extract_for_day(
 
     text_to_process = "\n".join([f"[{s['id']}] ({s['source']}): {s['text']}" for s in statements])
     messages = [
-        Message("system", SYSTEM_PROMPT),
+        Message("system", SYSTEM_PROMPT + (
+            f"\nThe statements were written on {target_date:%A %Y-%m-%d} (IST). Work out 'today', 'tomorrow', 'tonight' and "
+            "weekdays from that date; valid_from and valid_until must never be earlier than it.")),
         Message("user", text_to_process)
     ]
 
@@ -81,13 +83,18 @@ async def extract_for_day(
         except (TypeError, ValueError):
             confidence = 1.0
         source_id = item.get("source_id")
+        valid_from, valid_until = _date_or_none(item.get("valid_from")), _date_or_none(item.get("valid_until"))
+        if valid_from is None or valid_from < target_date:      # a model that guesses the date must not file the item in the past
+            valid_from = target_date
+        if valid_until is not None and valid_until < valid_from:
+            valid_until = valid_from
         row = await insert_candidate_item(
             pool,
             item_type=item["type"],
             text=str(item["text"]).strip(),
             effect=item.get("effect"),
-            valid_from=_date_or_none(item.get("valid_from")),
-            valid_until=_date_or_none(item.get("valid_until")),
+            valid_from=valid_from,
+            valid_until=valid_until,
             confidence=confidence,
             source_id=str(source_id) if source_id not in (None, "", "null") else None,
             reason=item.get("reason"),

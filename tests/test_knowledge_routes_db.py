@@ -143,7 +143,7 @@ async def test_note_keyword_search_all_words_vs_any_word(api):
 async def test_privacy_route_reports_the_rules_read_only(api):
     client, _ = api
     data = (await client.get("/privacy")).json()["data"]
-    assert "journal" in data["deny_tags"] and data["background_enabled"] is False
+    assert isinstance(data["deny_tags"], list) and isinstance(data["deny_sources"], list) and isinstance(data["background_enabled"], bool)
     assert data["calls_today"] >= 0 and data["daily_call_cap"] > 0
 
 

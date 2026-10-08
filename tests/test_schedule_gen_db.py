@@ -85,6 +85,7 @@ async def _clean(pool):
             await cur.execute("DELETE FROM schedule_log WHERE after->>'title' LIKE 'zz%' OR before->>'title' LIKE 'zz%'")
             await cur.execute("DELETE FROM schedule WHERE title LIKE 'zz%'")
             await cur.execute("DELETE FROM instruction_records WHERE text LIKE 'zz%'")
+            await cur.execute("DELETE FROM statements WHERE text LIKE 'zz%'")
             await cur.execute("DELETE FROM candidate_items WHERE text LIKE 'zz%'")
             await cur.execute("DELETE FROM tasks WHERE text LIKE 'zz%'")
 

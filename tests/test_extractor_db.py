@@ -1,5 +1,7 @@
 import json
 import pytest
+
+from config import Privacy
 from datetime import date
 from llm.client import Completion
 from llm.fake import FakeClient
@@ -74,8 +76,9 @@ async def test_extractor_never_sends_denied_statements(pool):
     sid = await _statement(pool, "zz private diary line", "journal", "2001-01-02 12:00:00+05:30")
     try:
         client = FakeClient([Completion('{"items": []}', "fake")])
-        assert await extract_for_day(client, pool, date(2001, 1, 2)) == []
-        assert client.calls == []       # the journal is denied by default, so there was nothing to send
+        deny_journal = Privacy(deny_tags=["journal"])          # the rule is tested explicitly: the shipped default may change
+        assert await extract_for_day(client, pool, date(2001, 1, 2), privacy=deny_journal) == []
+        assert client.calls == []       # the journal is denied by the rule, so there was nothing to send
     finally:
         await delete_statement(pool, sid)
 
@@ -91,7 +94,7 @@ async def test_extractor_skips_malformed_items_and_keeps_the_rest(pool):
     stored = []
     try:
         stored = await extract_for_day(FakeClient([Completion(reply, "fake")]), pool, date(2001, 1, 3))
-        assert [(r["item_type"], r["text"], r["source_id"], r["valid_from"]) for r in stored] == [("plan", "Run tomorrow", None, None)]
+        assert [(r["item_type"], r["text"], r["source_id"], r["valid_from"]) for r in stored] == [("plan", "Run tomorrow", None, date(2001, 1, 3))]   # an unreadable date falls back to the statement's day
     finally:
         await delete_statement(pool, sid)
         async with pool.connection() as conn:
