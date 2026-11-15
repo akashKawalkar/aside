@@ -74,6 +74,8 @@ patch_*.py
 !context/
 !context/**
 !docs/
+!digital/
+!digital/**
 !docs/**
 !evals/
 !evals/**
@@ -89,6 +91,8 @@ patch_*.py
 !llm/**
 !patterns/
 !patterns/**
+!practiced/
+!practiced/**
 !review/
 !review/**
 !schedule_gen/
