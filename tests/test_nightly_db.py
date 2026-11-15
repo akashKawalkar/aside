@@ -1,8 +1,9 @@
-"""The nightly job end to end against the (test) database with a FakeClient and a fixed 2031 clock: success, a model failure
-then a retry, a spent quota, reruns being no-ops, and the morning retry. A real model is never called. Everything created
-is `zz`-titled or dated 2031 and removed afterwards."""
+"""The nightly job end to end against the (test) database with a FakeClient and a fixed 2031 clock: the plan for the day that
+starts at 05:00, a model failure then a retry, a bad answer re-asked with its violations, a spent quota, reruns being no-ops,
+and the 05:00 retry. A real model is never called. Everything created is `zz`-titled or dated 2031 and removed afterwards."""
 from __future__ import annotations
 
+import copy
 import json
 from datetime import date, datetime, timedelta
 
@@ -14,9 +15,10 @@ from llm.background import background_client
 from llm.client import ModelProfile
 from llm.errors import LLMError
 from llm.fake import FakeClient
+from practiced.planning import EXAMPLE_OUTPUT
 from schedule_gen.model import IST
 
-NOW = datetime(2031, 3, 3, 21, 0, tzinfo=IST)          # Monday evening; the job makes Tuesday 4 March 2031
+NOW = datetime(2031, 3, 4, 4, 0, tzinfo=IST)           # 04:00 on Tuesday: the night run plans the day that starts at 05:00
 DAY = date(2031, 3, 4)
 PROFILE = ModelProfile(name="fake-gen", provider="fake", window=1_000_000, input_cost=1.0, output_cost=2.0,
                        supports_tools=True, supports_json=True)
@@ -26,10 +28,16 @@ def at(h, m=0, day=DAY):
     return datetime(day.year, day.month, day.day, h, m, tzinfo=IST)
 
 
-def reply(task_id=None):
-    return json.dumps({"entries": [
-        {"title": "zz Write report", "start": "09:00", "end": "11:00", "reason": "due soon", "task_id": task_id},
-        {"title": "zz Gym", "start": "18:00", "end": "19:00", "reason": "routine"}]})
+def reply(task_id=7):
+    """The prompt's worked example, which was written for a day with a fixed 09:00-10:00 event and one due task. One block is
+    marked shallow so the deep work (6 slots) sits inside the budget an empty history gives (4, give or take 2)."""
+    out = copy.deepcopy(EXAMPLE_OUTPUT)
+    for b in out["plan"]:
+        if b.get("task_id") is not None:
+            b["task_id"] = task_id
+        if b["title"] == "Project coding: tests":
+            b["depth"] = "shallow"
+    return json.dumps(out)
 
 
 class Flaky(FakeClient):
@@ -50,15 +58,17 @@ async def _clean(pool):
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("DELETE FROM schedule_draft WHERE target_day >= '2031-01-01'")
-            await cur.execute("DELETE FROM schedule_log WHERE after->>'title' LIKE 'zz%' OR before->>'title' LIKE 'zz%'")
-            await cur.execute("DELETE FROM schedule WHERE title LIKE 'zz%'")
+            await cur.execute("DELETE FROM schedule_log WHERE after->>'title' LIKE 'zz%' OR before->>'title' LIKE 'zz%' "
+                              "OR (after->>'start_at') LIKE '2031-%' OR (before->>'start_at') LIKE '2031-%'")
+            await cur.execute("DELETE FROM schedule WHERE title LIKE 'zz%' OR start_at >= '2031-01-01'")
             await cur.execute("DELETE FROM tasks WHERE text LIKE 'zz%'")
             await cur.execute("DELETE FROM job_run WHERE day >= '2031-01-01'")
             await cur.execute("DELETE FROM schedule_snapshot WHERE day >= '2031-01-01'")
             await cur.execute("DELETE FROM day_record WHERE day >= '2031-01-01'")
+            await cur.execute("DELETE FROM practiced_day WHERE day >= '2031-01-01'")
             await cur.execute("DELETE FROM observations WHERE last_evaluated_day >= '2031-01-01'")
             await cur.execute("DELETE FROM review_state WHERE key IN ('latest', 'settings')")
-            await cur.execute("DELETE FROM llm_trace WHERE operation = 'schedule' AND model = 'fake-gen'")
+            await cur.execute("DELETE FROM llm_trace WHERE operation IN ('schedule', 'plan') AND model = 'fake-gen'")
 
 
 @pytest.fixture
@@ -80,60 +90,99 @@ def gated(pool, fake):
 
 
 async def schedule_rows(pool):
-    return await storage.list_schedule_range(pool, start=at(0), end=at(0) + timedelta(days=1))
+    return await storage.list_schedule_range(pool, start=at(5), end=at(5) + timedelta(days=1))
+
+
+async def fixed_dentist(pool):
+    await storage.create_schedule_entry(pool, title="zz Dentist", start_at=at(9), end_at=at(10))
+
+
+async def due_task(pool):
+    return await storage.create_task(pool, text="zz report", due_at=at(10) - timedelta(days=1))
 
 
 async def runs(pool, **kw):
     return {(r["step"], r["attempt"]): r for r in await storage.list_job_runs(pool, day=DAY, **kw)}
 
 
-async def test_a_night_makes_a_generated_schedule_with_a_task_block_and_logs_every_step(pool):
-    task = await storage.create_task(pool, text="zz report", due_at=at(10) - timedelta(days=1))
+async def test_a_night_plans_the_day_around_a_fixed_event_with_a_task_block_and_logs_every_step(pool):
+    await fixed_dentist(pool)
+    task = await due_task(pool)
     fake = Flaky([reply(task["id"])], fail=0)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert result.steps["generate"] == "ok", result.steps
+    assert result.steps["plan"] == "ok", result.steps
     rows = await schedule_rows(pool)
-    assert [(r["title"], r["origin"]) for r in rows] == [("zz Write report", "generated"), ("zz Gym", "generated")]
+    generated = [r for r in rows if r["origin"] == "generated"]
+    assert len(generated) == len(EXAMPLE_OUTPUT["plan"]) and [r["title"] for r in rows if r["origin"] == "user"] == ["zz Dentist"]
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT task_id FROM schedule WHERE title = 'zz Write report'")
-            assert await cur.fetchone() == (task["id"],)
-    assert "[task" in fake.calls[0].messages[1].content                         # the tasks were offered with their ids
+            await cur.execute("SELECT task_id, why FROM schedule WHERE title = 'Renew passport form' AND start_at >= '2031-01-01'")
+            assert await cur.fetchone() == (task["id"], "task due tomorrow, early because it slipped")      # the reason is kept on the row
+    prompt = fake.calls[0].messages[1].content
+    assert f"[task {task['id']}]" in prompt and "FIXED: zz Dentist" in prompt and "SLOT GRID for the day Tuesday 2031-03-04" in prompt
     logged = {r["step"]: r for r in await storage.list_job_runs(pool, day=DAY)}
-    assert logged["generate"]["ok"] and logged["generate"]["detail"]["accepted"] == 2
-    assert result.steps["calendar_pull"].startswith("skipped") and result.steps["extract"] == "ok"
+    assert logged["plan"]["ok"] and logged["plan"]["detail"]["accepted"] == len(generated) and logged["plan"]["detail"]["reasked"] == 0
+    assert result.steps["calendar_pull"].startswith("skipped") and result.steps["extract"] == "ok" and result.steps["digest"] == "ok"
+    draft = (await storage.list_drafts(pool, day=DAY))[0]
+    assert draft["source"] == "llm" and draft["inputs"]["planner"] and "anchors" in draft["inputs"]["reasoning"]                 # the model's working is kept
 
 
 async def test_a_rerun_the_same_night_changes_nothing_and_makes_no_second_call(pool):
-    fake = Flaky([reply()], fail=0)
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    fake = Flaky([reply(task["id"])], fail=0)
     await run_nightly(pool, now=NOW, client=gated(pool, fake))
     before = len(await schedule_rows(pool))
     again = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert again.steps["generate"] == "skipped: already done" and again.ok
+    assert again.steps["plan"] == "skipped: already done" and again.ok
     assert len(fake.calls) == 1 and len(await schedule_rows(pool)) == before
 
 
 async def test_a_model_failure_is_retried_once_and_both_attempts_are_logged(pool):
-    fake = Flaky([reply()], fail=1)
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    fake = Flaky([reply(task["id"])], fail=1)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert result.steps["generate"] == "ok" and fake.attempts == 2
+    assert result.steps["plan"] == "ok" and fake.attempts == 2
     logged = await runs(pool)
-    assert logged[("generate", 1)]["ok"] is False and "503" in logged[("generate", 1)]["error"]
-    assert logged[("generate", 2)]["ok"] is True and len(await schedule_rows(pool)) == 2
+    assert logged[("plan", 1)]["ok"] is False and "503" in logged[("plan", 1)]["error"]
+    assert logged[("plan", 2)]["ok"] is True
 
 
-async def test_two_failures_leave_no_schedule_and_a_reason_and_the_run_continues(pool):
-    fake = Flaky([reply()], fail=5)
+async def test_a_bad_answer_is_re_asked_with_the_violations_listed(pool):
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    short = json.loads(reply(task["id"]))
+    short["plan"].pop()                                          # leaves the last free slot without a block
+    fake = Flaky([json.dumps(short), reply(task["id"])], fail=0)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert result.steps["generate"].startswith("failed") and not result.ok
-    assert result.steps["review"] == "ok"                       # the review does not wait for the schedule
+    assert result.steps["plan"] == "ok" and len(fake.calls) == 2
+    assert "That plan cannot be used" in fake.calls[1].messages[-1].content and "no block" in fake.calls[1].messages[-1].content
+    assert (await runs(pool))[("plan", 1)]["detail"]["reasked"] == 1
+
+
+async def test_an_answer_that_never_passes_fails_the_step_with_no_fallback_plan(pool):
+    await fixed_dentist(pool)
+    fake = Flaky([json.dumps({"anchors": {}})], fail=0)
+    result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
+
+    assert result.steps["plan"].startswith("failed: PlanError") and not result.ok
+    assert [r["origin"] for r in await schedule_rows(pool)] == ["user"]            # only the person's own event
+    assert result.steps["review"] == "ok"
+
+
+async def test_two_failures_leave_no_plan_and_a_reason_and_the_run_continues(pool):
+    fake = Flaky([reply()], fail=9)
+    result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
+
+    assert result.steps["plan"].startswith("failed") and not result.ok
+    assert result.steps["review"] == "ok"                       # the review does not wait for the plan
     assert await schedule_rows(pool) == []
-    logged = await runs(pool)
-    assert sorted(k for k in logged if k[0] == "generate") == [("generate", 1), ("generate", 2)]
+    assert sorted(k for k in await runs(pool) if k[0] == "plan") == [("plan", 1), ("plan", 2)]
 
 
 async def test_a_spent_quota_is_not_retried(pool, monkeypatch):
@@ -149,8 +198,8 @@ async def test_a_spent_quota_is_not_retried(pool, monkeypatch):
     fake = Flaky([reply()], fail=0)
     result = await run_nightly(pool, now=NOW, client=background_client(pool, inner=fake))
 
-    assert result.steps["generate"].startswith("failed: QuotaExceeded")
-    assert fake.attempts == 0 and [k for k in await runs(pool) if k[0] == "generate"] == [("generate", 1)]
+    assert result.steps["plan"].startswith("failed: QuotaExceeded")
+    assert fake.attempts == 0 and [k for k in await runs(pool) if k[0] == "plan"] == [("plan", 1)]
 
 
 async def test_background_tier_off_means_a_clear_failure_not_a_call(pool, monkeypatch):
@@ -158,29 +207,32 @@ async def test_background_tier_off_means_a_clear_failure_not_a_call(pool, monkey
     fake = Flaky([reply()], fail=0)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert "disabled" in result.steps["generate"] and fake.attempts == 0
+    assert "disabled" in result.steps["plan"] and fake.attempts == 0
     assert result.steps["extract"].startswith("skipped")
 
 
-async def test_the_morning_retry_fills_today_when_the_night_failed_and_is_a_noop_otherwise(pool):
-    morning = datetime(2031, 3, 4, 7, 30, tzinfo=IST)
-    await run_nightly(pool, now=NOW, client=gated(pool, Flaky([reply()], fail=5)))      # night failed: nothing for the 4th
-    assert await schedule_rows(pool) == []
+async def test_the_five_o_clock_retry_plans_the_day_when_the_night_failed_and_is_a_noop_otherwise(pool):
+    retry_at = datetime(2031, 3, 4, 5, 0, tzinfo=IST)
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    await run_nightly(pool, now=NOW, client=gated(pool, Flaky([reply(task["id"])], fail=9)))      # the night run failed
+    assert [r["origin"] for r in await schedule_rows(pool)] == ["user"]
 
-    fake = Flaky([reply()], fail=0)
-    retry = await run_nightly(pool, kind="morning_retry", now=morning, client=gated(pool, fake))
-    assert retry.day == DAY and retry.steps["generate"] == "ok" and len(await schedule_rows(pool)) == 2
-    assert "sessionize" not in retry.steps                                                # only the schedule steps
+    fake = Flaky([reply(task["id"])], fail=0)
+    retry = await run_nightly(pool, kind="morning_retry", now=retry_at, client=gated(pool, fake))
+    assert retry.day == DAY and retry.steps["plan"] == "ok" and len(await schedule_rows(pool)) == 1 + len(EXAMPLE_OUTPUT["plan"])
+    assert "sessionize" not in retry.steps                                                # only the plan steps
 
-    fake2 = Flaky([reply()], fail=0)
-    noop = await run_nightly(pool, kind="morning_retry", now=morning, client=gated(pool, fake2))
-    assert noop.steps["generate"] == "skipped: already done" and fake2.attempts == 0
+    fake2 = Flaky([reply(task["id"])], fail=0)
+    noop = await run_nightly(pool, kind="morning_retry", now=retry_at, client=gated(pool, fake2))
+    assert noop.steps["plan"] == "skipped: already done" and fake2.attempts == 0
 
 
-async def test_a_day_the_user_already_built_is_left_alone(pool):
-    await storage.create_schedule_entry(pool, title="zz Dentist", start_at=at(15), end_at=at(16))
+async def test_a_day_that_already_has_a_generated_plan_is_left_alone(pool):
+    async with pool.connection() as conn:
+        await conn.execute("INSERT INTO schedule (title, start_at, end_at, origin) VALUES ('zz Earlier plan', %s, %s, 'generated')", (at(11), at(12)))
     fake = Flaky([reply()], fail=0)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
-    assert result.steps["generate"] == "skipped: tomorrow_has_entries" and fake.attempts == 0
-    assert [r["title"] for r in await schedule_rows(pool)] == ["zz Dentist"]
+    assert result.steps["plan"] == "skipped: day_already_planned" and fake.attempts == 0
+    assert [r["title"] for r in await schedule_rows(pool)] == ["zz Earlier plan"]

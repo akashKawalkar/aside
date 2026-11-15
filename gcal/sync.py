@@ -131,7 +131,8 @@ async def push_events(pool, client: CalendarClient, *, start: datetime, end: dat
                 report.deleted += 1
             continue
 
-        event = CalEvent(row["gcal_event_id"], row["title"], row["start_at"], row["end_at"], aside_id=row["id"], task_id=row["task_id"])
+        event = CalEvent(row["gcal_event_id"], row["title"], row["start_at"], row["end_at"], aside_id=row["id"], task_id=row["task_id"],
+                         description=row.get("why"))
         if row["gcal_event_id"] is None:
             stored = await client.insert_event(event)
         elif synced is None or row["updated_at"] > synced + TOL:

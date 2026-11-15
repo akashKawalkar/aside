@@ -24,7 +24,8 @@ async def list_sync_entries(pool, *, start: datetime, end: datetime) -> list[dic
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                f"SELECT {SYNC_COLUMNS} FROM schedule WHERE start_at < %s AND end_at > %s ORDER BY start_at, id", (end, start)
+                # `why` is read through to_jsonb so this still works on a database that has not had the add_schedule_why migration yet
+                f"SELECT {SYNC_COLUMNS}, to_jsonb(schedule)->>'why' AS why FROM schedule WHERE start_at < %s AND end_at > %s ORDER BY start_at, id", (end, start)
             )
             return await cur.fetchall()
 

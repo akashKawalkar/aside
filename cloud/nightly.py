@@ -2,11 +2,11 @@
 # Runs from a scheduled GitHub Action (python -m cloud) against the shared database; every step is a plain function that
 # already exists for the laptop, so the Action and the laptop cannot drift apart.
 #
-#   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> extract -> patterns -> generate -> calendar_push -> review
-#   morning_retry     calendar_pull -> generate -> calendar_push        (the schedule is for TODAY; a no-op if a draft exists)
+#   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> extract -> patterns -> digest -> plan -> calendar_push -> review
+#   morning_retry     calendar_pull -> digest -> plan -> calendar_push        (the same day again; a no-op if it is already planned)
 #
-# A failing step is recorded and the run goes on to the next one (the schedule does not wait for the review). The schedule
-# step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
+# Both runs happen while the person sleeps (04:00 and 05:00 IST) and plan the day starting at 05:00. A failing step is recorded and
+# the run goes on to the next one (the plan does not wait for the review). The plan step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
 from __future__ import annotations
 
 import logging
@@ -18,25 +18,23 @@ from zoneinfo import ZoneInfo
 
 import storage
 from config import load_config
-from context.recipe import load_recipe
 from extractor.worker import run_extractor_once
-from llm.approved import ApprovalRequired, QuotaExceeded
+from llm.approved import ApprovalRequired, Grant, QuotaExceeded, approved
 from llm.background import background_client
-from llm.client import load_profile
 from patterns.engine import run_patterns_once
+from practiced.planrun import plan_day, run_plan_once
+from practiced.store import run_digest_once
 from review.daily import run_daily_once
 from review.store import DbBackend, ReviewStore
 from review.wiring import make_review_generator
-from schedule_gen import service
-from schedule_gen.model import rules_from_config, tomorrow
 from sessions.job import sessionize_recent
 
 log = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 
-FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "extract", "patterns", "generate", "calendar_push", "review")
-STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "generate", "calendar_push")}
-ONCE = {"extract", "generate", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
+FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "extract", "patterns", "digest", "plan", "calendar_push", "review")
+STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "digest", "plan", "calendar_push")}
+ONCE = {"extract", "plan", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
 NOT_RETRIED = (QuotaExceeded, ApprovalRequired)
 
 Hook = Callable[[datetime], Awaitable[dict[str, Any] | None]]
@@ -61,8 +59,9 @@ class NightlyResult:
 
 
 def target_day(kind: str, now: datetime) -> date:
-    """The schedule being made: tomorrow's for the evening run, today's for the morning retry."""
-    return now.astimezone(IST).date() if kind == "morning_retry" else tomorrow(now)
+    """The day being planned: the logical day (05:00 to 05:00) that starts on the run's own date. Both runs happen while the
+    person sleeps, at 04:00 and 05:00 IST, so both plan the day about to begin."""
+    return plan_day(now)
 
 
 async def run_nightly(
@@ -103,41 +102,40 @@ async def run_nightly(
     async def step_patterns() -> dict:
         return {"observations": await run_patterns_once(pool, cfg.patterns, now=now)}
 
+    async def step_digest() -> dict:
+        # Practiced schedule + digest for the last finished days (05:00 to 05:00), cached; unchanged days cost no model call.
+        if not cfg.llm.background_enabled:
+            return {"skipped": "background model calls are disabled"}
+        with approved(Grant("background", operation="digest")):
+            return await run_digest_once(pool, client or background_client(pool), now)
+
     async def step_review() -> dict:
         store = ReviewStore(DbBackend(pool))
         review = await generator.generate(review_date=today)
         await store.save_latest(review)
         return {"date": today.isoformat()}
 
-    async def step_generate() -> dict:
-        async def save_log(row):
-            try:
-                return await storage.insert_compile_log(pool, row)
-            except Exception:
-                log.warning("could not save compile log")
-                return None
-
-        return await service.generate_unattended(
-            pool, client or background_client(pool), now=now, rules=rules_from_config(result.day, cfg.data_quality),
-            profile=load_profile(), recipe=load_recipe("schedule"), save_log=save_log, max_item_tokens=cfg.llm.max_item_tokens,
-        )
+    async def step_plan() -> dict:
+        # The day's plan, from the practiced history, patterns and the person's answers; checked, re-asked on violations.
+        with approved(Grant("background", operation="plan")):
+            return await run_plan_once(pool, client or background_client(pool), now)
 
     async def step_hook(hook: Hook | None) -> dict:
         return {"skipped": "not configured"} if hook is None else (await hook(now) or {})
 
     actions: dict[str, Callable[[], Awaitable[dict]]] = {
         "calendar_pull": lambda: step_hook(hooks.pull), "sessionize": step_sessionize, "daily": step_daily,
-        "drop_stale": step_drop_stale, "extract": step_extract, "patterns": step_patterns, "generate": step_generate,
+        "drop_stale": step_drop_stale, "extract": step_extract, "patterns": step_patterns, "digest": step_digest, "plan": step_plan,
         "calendar_push": lambda: step_hook(hooks.push), "review": step_review,
     }
 
     for step in STEPS[kind]:
-        day = result.day if step == "generate" else today
+        day = result.day if step == "plan" else today
         if step in ONCE and await storage.step_done(pool, day=day, step=step):
             result.steps[step] = "skipped: already done"
             continue
 
-        attempts = cfg.cloud.retry_attempts if step == "generate" else 1
+        attempts = cfg.cloud.retry_attempts if step == "plan" else 1
         for attempt in range(1, attempts + 1):
             try:
                 detail = await actions[step]()

@@ -18,6 +18,7 @@ class CalEvent:
     cancelled: bool = False
     aside_id: int | None = None
     task_id: int | None = None
+    description: str | None = None        # the block's reason; sent to Google, never read back
 
 
 @dataclass

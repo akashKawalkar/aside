@@ -49,6 +49,8 @@ class Llm(BaseModel):
     background_enabled: bool = False                    # extraction, pattern naming, ...: off until the privacy layer exists (plan §3.9)
     max_item_tokens: int = Field(default=500, gt=0)     # no single context item may exceed this (context/gate.py)
     attempt_timeout: float = Field(default=45.0, gt=0, le=MAX_ATTEMPT_TIMEOUT)  # seconds one attempt waits; replies take 2-30 s normally, but stall for minutes when the service is overloaded
+    chat_memory_messages: int = Field(default=10, ge=0, le=40)   # most recent chat messages (user + reply) sent along with a new one; 0 = no memory
+    chat_memory_chars: int = Field(default=1200, gt=0)           # each remembered message is cut to this many characters, so memory stays cheap
     fallback_model: str = "gemini-3.1-flash-lite"      # tried once when the chosen model is overloaded (503) or silent; "" turns the fallback off
 
 

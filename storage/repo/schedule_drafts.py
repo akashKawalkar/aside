@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from schedule_gen.model import ACCEPTED, DISCARDED, PENDING, DraftEntry, settled_status
@@ -123,6 +124,12 @@ async def accept_entries(pool, draft_id: int, indexes: list[int]) -> dict[str, A
                 await cur.execute(CREATE_SCHEDULE_SQL, (e.title, e.start_at, e.end_at, "generated", e.task_id))
                 created = _row_to_dict(await cur.fetchone())
                 await _log(cur, created["id"], "create", None, created)
+                if e.reason:
+                    try:
+                        async with conn.transaction():          # a savepoint: a database without the `why` column just skips it
+                            await cur.execute("UPDATE schedule SET why = %s WHERE id = %s", (e.reason, created["id"]))
+                    except psycopg.errors.UndefinedColumn:
+                        pass
                 e.state, e.locked, e.schedule_id = ACCEPTED, True, created["id"]
                 accepted.append(created["id"])
 

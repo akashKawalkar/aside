@@ -47,12 +47,15 @@ def event_from_api(item: dict[str, Any]) -> CalEvent | None:
 
 def event_to_api(event: CalEvent) -> dict[str, Any]:
     private = {k: str(v) for k, v in (("aside_id", event.aside_id), ("task_id", event.task_id)) if v is not None}
-    return {
+    body = {
         "summary": event.title,
         "start": {"dateTime": event.start_at.astimezone(IST).isoformat(), "timeZone": "Asia/Kolkata"},
         "end": {"dateTime": event.end_at.astimezone(IST).isoformat(), "timeZone": "Asia/Kolkata"},
         "extendedProperties": {"private": private},
     }
+    if event.description:
+        body["description"] = event.description
+    return body
 
 
 def task_from_api(item: dict[str, Any]) -> CalTask:

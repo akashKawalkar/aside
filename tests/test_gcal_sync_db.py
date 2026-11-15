@@ -188,6 +188,28 @@ async def test_a_generated_draft_accepted_later_is_pushed_with_its_task_link(poo
     assert next(iter(cal.events.values())).task_id == task["id"]
 
 
+async def test_a_blocks_reason_travels_to_the_calendar_as_its_description(pool, cal):
+    async with pool.connection() as conn:
+        await conn.execute("INSERT INTO schedule (title, start_at, end_at, origin, why) VALUES ('zz Why', %s, %s, 'generated', 'deep work in the strongest window')", (at(9), at(10)))
+    await sync(pool, cal)
+    assert next(iter(cal.events.values())).description == "deep work in the strongest window"
+
+
+async def test_accepting_a_draft_keeps_each_blocks_reason_on_its_row(pool):
+    draft = await storage.insert_draft(
+        pool, target_day=DAY, source="llm", model=None, instruction="", rejected=[], inputs={},
+        entries=[{"title": "zz Reasoned", "start_at": at(9).isoformat(), "end_at": at(10).isoformat(), "reason": "because it slipped", "state": "pending"}])
+    try:
+        await storage.accept_entries(pool, draft["id"], [0])
+        async with pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT why FROM schedule WHERE title = 'zz Reasoned'")
+                assert (await cur.fetchone())[0] == "because it slipped"
+    finally:
+        async with pool.connection() as conn:
+            await conn.execute("DELETE FROM schedule_draft WHERE id = %s", (draft["id"],))
+
+
 # ---------- tasks ----------
 
 async def tasks_env(pool):
