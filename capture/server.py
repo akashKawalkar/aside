@@ -109,12 +109,20 @@ class ScheduleUpdateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     start_at: datetime
     end_at: datetime
+class ChatTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    text: str = Field(max_length=20_000)
+
+
 class InputRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(max_length=10_000)
     mode: str
     key: str
+    history: list[ChatTurn] = Field(default_factory=list, max_length=100)   # earlier chat messages, oldest first; trimmed server-side
 class MonitoringRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -232,17 +240,20 @@ async def _default_diff_log_handler() -> OperationResponse:
         data={"entries": entries},
     )
 
-async def _default_table_handler(name: str) -> OperationResponse:
+async def _default_table_handler(name: str, source: str | None = None) -> OperationResponse:
     if name not in BROWSABLE_TABLES:
         return op_error(f"'{name}' is not a browsable table.")
+    if source is not None and name != "events":
+        return op_error("Only the events table can be filtered by source.")
 
     pool = app.state.db_pool
 
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(
-                f"SELECT * FROM {name} ORDER BY id DESC LIMIT 200"
-            )
+            if source is None:
+                await cur.execute(f"SELECT * FROM {name} ORDER BY id DESC LIMIT 200")
+            else:       # only ever events here (checked above); the value is a bound parameter
+                await cur.execute("SELECT * FROM events WHERE source = %s ORDER BY id DESC LIMIT 200", (source,))
 
             columns = [desc.name for desc in cur.description]
             rows = await cur.fetchall()
@@ -510,8 +521,8 @@ def create_app(
         return op_ok(data={"recorded": True})
 
     @app.get("/tables/{name}", response_model=OperationResponse)
-    async def table(name: str) -> OperationResponse:
-        result = table_fn(name)
+    async def table(name: str, source: str | None = None) -> OperationResponse:
+        result = table_fn(name) if source is None else table_fn(name, source)
         if inspect.isawaitable(result):
             result = await result
         return result
@@ -637,8 +648,11 @@ def create_app(
                 save_log=_safe_save_log,
                 max_item_tokens=load_config().llm.max_item_tokens,
             )
+            llm_cfg = load_config().llm
+            recent = request.history[-llm_cfg.chat_memory_messages:] if llm_cfg.chat_memory_messages else []
             messages = [
                 Message("system", compiled.text),
+                *(Message(t.role, t.text[: llm_cfg.chat_memory_chars]) for t in recent),
                 Message("user", result.text),
             ]
             try:
@@ -655,7 +669,20 @@ def create_app(
                 data={"destination": "chat_llm", "saved_as": "none", "ring": "yellow", **llm_run.reply_data(completion, compiled.id)},
             )
 
-        if target == "note" or target == "journal_note":
+        if target in ("plan_note", "rule_note"):
+            # Planner input, not general context: tagged notes the planning call reads directly. They do not feed the
+            # nightly extractor (no statement row), exactly like the phone's p: and r:.
+            note = await capture_note(
+                result.text,
+                save_note=lambda payload: save_note(pool, payload),
+                tags=["plan"] if target == "plan_note" else ["rule"],
+                source="panel",
+            )
+            if note is None:
+                return op_error("Note capture failed.")
+            record_id = note.id
+
+        elif target == "note" or target == "journal_note":
             note = await capture_note(
                 result.text,
                 save_note=lambda payload: save_note(pool, payload),

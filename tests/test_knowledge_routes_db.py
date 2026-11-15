@@ -112,6 +112,17 @@ async def test_journal_prefix_saves_a_note_tagged_journal(api):
     assert text == "zz felt scattered today"                 # the prefix is routing, not content
 
 
+async def test_plan_and_rule_prefixes_save_tagged_notes_and_skip_the_extractor(api):
+    client, pool = api
+    for text, tag in (("p: zz no calls after 6", "plan"), ("rule: zz meditate before dinner", "rule"), ("r: zz short rule", "rule")):
+        saved = (await client.post("/input", json={"text": text, "mode": "chat", "key": "enter"})).json()["data"]
+        assert await sql(pool, "SELECT tags FROM notes WHERE id = %s", saved["id"]) == [tag]
+    assert await sql(pool, "SELECT text FROM notes WHERE tags ? 'plan' AND text LIKE 'zz%%'") == "zz no calls after 6"
+    assert await sql(pool, "SELECT count(*) FROM statements WHERE text LIKE 'zz%%'") == 0
+    empty = (await client.post("/input", json={"text": "p:", "mode": "chat", "key": "enter"})).json()
+    assert empty["status"] == "error"
+
+
 async def test_keyword_search_treats_percent_and_underscore_literally(api):
     client, pool = api
     await client.post("/input", json={"text": "note: zz 100% sure", "mode": "chat", "key": "enter"})

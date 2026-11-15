@@ -40,27 +40,42 @@ function noteRow(note, reload) {
   const row = h("li", { class: "gt-row note-row" }, h("div", { class: "gt-main" }, textInput, chips.length ? h("div", { class: "pf-chips" }, chips) : null), delBtn);
 
   let saved = note.text;
-  
-  async function commit() {
-    const next = textInput.value.trim();
-    if (next === saved) return;
-    if (!next) { showSnackbar("Note cannot be empty."); textInput.value = saved; return; }
-    textInput.disabled = true;
-    const envelope = await updateNote(note.id, { text: next, tags: note.tags });
-    textInput.disabled = false;
-    if (envelope.status === "error") { showSnackbar(envelopeError(envelope)); textInput.value = saved; return; }
-    saved = envelope.data.note.text;
-    textInput.value = saved;
-    row.classList.remove("saved");
-    void row.offsetWidth;
-    row.classList.add("saved");
-  }
+  textInput.readOnly = true;
+  textInput.title = "Click to open";
 
-  textInput.addEventListener("blur", commit);
-  textInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); textInput.blur(); }
-    else if (e.key === "Escape") { textInput.value = saved; textInput.blur(); }
-  });
+  // Click opens the note in a larger, scrollable editor; Save writes it, Esc/Cancel discards.
+  function openNote() {
+    const area = h("textarea", { class: "note-modal-text", "aria-label": "Note text", maxlength: "10000" });
+    area.value = saved;
+    const saveBtn = h("button", { type: "button", class: "btn filled stateful" }, "Save");
+    const cancelBtn = h("button", { type: "button", class: "btn outlined stateful" }, "Cancel");
+    const meta = h("div", { class: "pf-chips" }, chips.map((c) => c.cloneNode(true)));
+    const dialog = h("dialog", { class: "note-modal" }, meta, area, h("div", { class: "note-modal-actions" }, cancelBtn, saveBtn));
+    document.body.appendChild(dialog);
+    const close = () => { dialog.close(); dialog.remove(); };
+    dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+    dialog.addEventListener("click", (e) => { if (e.target === dialog) close(); });
+    cancelBtn.addEventListener("click", close);
+    saveBtn.addEventListener("click", async () => {
+      const next = area.value.trim();
+      if (!next) { showSnackbar("Note cannot be empty."); return; }
+      if (next === saved) { close(); return; }
+      saveBtn.disabled = true;
+      const envelope = await updateNote(note.id, { text: next, tags: note.tags });
+      saveBtn.disabled = false;
+      if (envelope.status === "error") { showSnackbar(envelopeError(envelope)); return; }
+      saved = envelope.data.note.text;
+      textInput.value = saved;
+      close();
+      row.classList.remove("saved");
+      void row.offsetWidth;
+      row.classList.add("saved");
+    });
+    dialog.showModal();
+    area.focus();
+  }
+  textInput.addEventListener("click", openNote);
+  textInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openNote(); } });
 
   delBtn.addEventListener("click", async () => {
     delBtn.disabled = true;

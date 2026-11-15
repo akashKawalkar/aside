@@ -80,7 +80,7 @@ export const api = {
 
 // ---------- unified input ----------
 
-export function sendInput(text, mode, key) {
+export function sendInput(text, mode, key, history = []) {
   return request("/input", {
     method: "POST",
     timeoutMs: MODEL_CALL_TIMEOUT_MS,      // a chat message is a model call, and a model call can take a minute or two
@@ -88,6 +88,7 @@ export function sendInput(text, mode, key) {
       text,
       mode,
       key,
+      ...(history.length ? { history } : {}),
     }),
   });
 }
@@ -227,8 +228,8 @@ export function markWrong(target, reason = null) {
   return request("/mark-wrong", { method: "POST", body: JSON.stringify({ target, reason }) });
 }
 
-export function getTable(name) {
-  return request(`/tables/${encodeURIComponent(name)}`, { method: "GET" });
+export function getTable(name, source = null) {
+  return request(`/tables/${encodeURIComponent(name)}${source ? `?source=${encodeURIComponent(source)}` : ""}`, { method: "GET" });
 }
 
 

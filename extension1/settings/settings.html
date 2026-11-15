@@ -48,7 +48,7 @@
       <section class="tab-panel active" id="tab-general">
         <header class="section-head">
           <h2>General</h2>
-          <p class="supporting">Monitoring and privacy.</p>
+          <p class="supporting">Monitoring, privacy, shortcuts and hidden features.</p>
         </header>
 
         <div class="card setting-card">
@@ -70,6 +70,62 @@
             <div class="supporting">Read-only. These rules are applied before anything is sent to a model (chat, drafts and the nightly job). Change them in config.toml.</div>
           </div>
           <div id="privacy-view" class="flex-column gap-3"></div>
+        </div>
+
+        <div class="card setting-card">
+          <div class="setting-text">
+            <div class="title-medium">Keyboard shortcuts</div>
+            <div class="supporting">Browser-wide. Change them at chrome://extensions/shortcuts.</div>
+          </div>
+          <div class="flex-column gap-3">
+            <div class="supporting"><b>Alt+Shift+A</b>: open the panel and focus the input</div>
+            <div class="supporting"><b>Alt+Shift+N</b>: open the panel in Note mode</div>
+            <div class="supporting"><b>Alt+Shift+S</b>: open the panel in Schedule mode</div>
+            <div class="supporting"><b>Alt+Shift+M</b>: pause or resume monitoring without opening the panel</div>
+          </div>
+        </div>
+
+        <div class="card setting-card">
+          <div class="setting-text">
+            <div class="title-medium">In the side panel</div>
+          </div>
+          <div class="flex-column gap-3">
+            <div class="supporting"><b>Tab / Shift+Tab</b>: cycle the mode (Chat, Task, Schedule, Note). The mode stays until the panel closes.</div>
+            <div class="supporting"><b>Enter</b>: send in the current mode. In Chat this calls the model at once.</div>
+            <div class="supporting"><b>Ctrl+Enter</b>: send and let the script classifier pick the destination.</div>
+            <div class="supporting"><b>Left / Right arrows</b> on the mode chips: switch mode.</div>
+            <div class="supporting"><b>Click a due-date chip</b> on a task to change it (presets: this evening, tomorrow, next Monday). Today is green, overdue is red.</div>
+            <div class="supporting"><b>Completed a task by mistake?</b> Use Undo in the snackbar.</div>
+          </div>
+        </div>
+
+        <div class="card setting-card">
+          <div class="setting-text">
+            <div class="title-medium">Typing prefixes</div>
+            <div class="supporting">A prefix always wins over the selected mode. Start with a backslash to skip prefix detection and send the text as it is.</div>
+          </div>
+          <div class="flex-column gap-3">
+            <div class="supporting"><b>note:</b> save a note</div>
+            <div class="supporting"><b>journal:</b> save a journal note. It is never sent to a model by default (see the rules above).</div>
+            <div class="supporting"><b>task:</b> add a task</div>
+            <div class="supporting"><b>plan:</b> (or <b>p:</b>) an instruction for the next schedule only, for example "no calls after 6". Saved as a note tagged plan; the planner reads it once.</div>
+            <div class="supporting"><b>rule:</b> (or <b>r:</b>) a standing rule. Saved for you to review, then moved into your preferences.</div>
+            <div class="supporting"><b>schedule:</b> add a schedule entry (default: next free half hour, 30 minutes)</div>
+            <div class="supporting"><b>find:</b> search your notes locally (keywords and local embeddings). No model call, nothing saved.</div>
+            <div class="supporting"><b>wrong:</b> mark the last model reply as wrong. Text after it is an optional reason. Nothing is saved as a note; it becomes a replayable test case.</div>
+          </div>
+        </div>
+
+        <div class="card setting-card">
+          <div class="setting-text">
+            <div class="title-medium">Hidden features</div>
+          </div>
+          <div class="flex-column gap-3">
+            <div class="supporting"><b>Press and hold a row</b> on the What changed page: mark that change as wrong (it only logs the mark).</div>
+            <div class="supporting"><b>Notes tab:</b> click a note to open it in a larger, scrollable editor. The search box finds notes without a model call.</div>
+            <div class="supporting"><b>Schedule tile:</b> Draft tomorrow appears only when tomorrow is empty. Reasons for each block are on the Review page and the Drafts tab, not in the panel.</div>
+            <div class="supporting"><b>Context viewer and Drafts:</b> see exactly what was sent to the model and what the checks dropped.</div>
+          </div>
         </div>
       </section>
 

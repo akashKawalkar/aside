@@ -7,6 +7,8 @@ from typing import Literal
 Destination = Literal[
     "note",
     "journal_note",
+    "plan_note",
+    "rule_note",
     "task",
     "schedule",
     "chat_llm",
@@ -39,6 +41,10 @@ class RouteResult:
 TRIGGERS = {
     "note:": "note",
     "journal:": "journal_note",
+    "plan:": "plan_note",   # an instruction for the next plan only (the phone says p:)
+    "p:": "plan_note",
+    "rule:": "rule_note",   # a standing rule, saved for review (the phone says r:)
+    "r:": "rule_note",
     "task:": "task",
     "schedule:": "schedule",
     "find:": "find",     # looks notes up locally (keyword + local embeddings); no model call, nothing saved
@@ -84,7 +90,7 @@ def route(
         if lowered.startswith(prefix):
             content = text[len(prefix):].lstrip()
 
-            if destination == "note" and not content:
+            if destination in ("note", "plan_note", "rule_note") and not content:
                 return RouteResult(
                     destination=None,
                     text="",

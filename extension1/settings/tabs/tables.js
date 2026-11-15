@@ -5,8 +5,16 @@ import { createSelect } from "../../shared/ui/select.js";
 import { $, envelopeError, emptyState, showLoading } from "./_shared.js";
 
 const TABLES = [
-  "events", "sessions", "notes",
-  "agent_runs", "eval_runs", "persistent_entry", "diff_log", "mark_wrong_log", "tasks", "task_log", "schedule",
+  "events", "sessions", "notes", "tasks", "task_log", "schedule", "schedule_draft", "day_record", "observations",
+  "persistent_entry", "diff_log", "compile_log", "llm_trace", "mark_wrong_log", "heartbeat_log", "monitoring_log",
+  "agent_runs", "eval_runs",
+];
+// The events table mixes every device; this narrows it to one. "all" = no filter.
+const EVENT_SOURCES = [
+  { value: "all", label: "all sources" },
+  { value: "laptop", label: "Windows app focus (laptop)" },
+  { value: "browser", label: "Chrome tabs (browser)" },
+  { value: "android", label: "Android apps (android)" },
 ];
 
 const tableView = $("table-view");
@@ -18,7 +26,14 @@ const tableSelect = createSelect({
   value: "events",
   onChange: (name) => loadTable(name),
 });
-$("table-select-slot").append(tableSelect.el);
+const sourceSelect = createSelect({
+  label: "Source",
+  options: EVENT_SOURCES,
+  value: "all",
+  onChange: () => loadTable(),
+});
+sourceSelect.el.hidden = true;     // only meaningful for the events table
+$("table-select-slot").append(tableSelect.el, sourceSelect.el);
 
 function renderTable(columns, rows) {
   if (rows.length === 0) {
@@ -59,8 +74,10 @@ function renderTable(columns, rows) {
 export async function loadTable(name = tableSelect.getValue()) {
   showLoading(tableView, 6);
   tableCount.hidden = true;
+  sourceSelect.el.hidden = name !== "events";
 
-  const envelope = await getTable(name);
+  const source = name === "events" ? sourceSelect.getValue() : "all";
+  const envelope = await getTable(name, source === "all" ? null : source);
 
   if (envelope.status === "error") {
     tableView.replaceChildren(emptyState("error", `Couldn't load: ${envelopeError(envelope)}`));

@@ -907,6 +907,35 @@ body {
   align-items: flex-start;
 }
 .note-row .gt-main { flex: 1; min-width: 0; }
+.note-row .gt-title { cursor: pointer; text-overflow: ellipsis; }
+.note-modal {
+  width: min(720px, 92vw);
+  max-height: 85vh;
+  padding: 20px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--shape-lg);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+}
+.note-modal[open] { display: flex; flex-direction: column; gap: 12px; }
+.note-modal::backdrop { background: var(--md-scrim); }
+.note-modal-text {
+  min-height: 40vh;
+  max-height: 60vh;
+  padding: 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--shape-md);
+  background: var(--md-surface-high);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 15px;
+  line-height: 24px;
+  resize: vertical;
+  overflow-y: auto;
+  outline: none;
+}
+.note-modal-text:focus { border-color: var(--md-primary); }
+.note-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .note-row .pf-chips { margin-top: 4px; }
 .note-row + .note-row { border-top: 1px solid var(--md-outline-variant); }
 

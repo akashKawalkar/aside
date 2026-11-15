@@ -87,3 +87,18 @@ async def test_a_cut_off_reply_says_so(env):
     cut = Completion("half an ans", "fake-chat", Usage(10, 5), 0.0, "length")
     out = await ask(build(FakeClient([cut], profile=PROFILE)))
     assert out["data"]["finish_reason"] == "length"
+
+
+async def test_recent_history_is_sent_between_the_system_message_and_the_new_one_and_is_trimmed(env):
+    from config import load_config
+    build, _, _ = env
+    keep = load_config().llm.chat_memory_messages
+    history = [{"role": "user" if n % 2 == 0 else "assistant", "text": f"m{n}"} for n in range(keep + 6)]
+    fake = FakeClient(["ok"], profile=PROFILE)
+    body = {"text": "zz and now", "mode": "chat", "key": "enter", "history": history}
+    out = (await build(fake).post("/input", json=body)).json()
+
+    assert out["status"] == "ok"
+    sent = fake.calls[0].messages
+    assert [m.role for m in sent][0] == "system" and sent[-1].content == "zz and now"
+    assert [m.content for m in sent[1:-1]] == [h["text"] for h in history[-keep:]]

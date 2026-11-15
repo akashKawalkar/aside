@@ -30,7 +30,7 @@ function taskRow(task) {
     "button",
     {
       type: "button",
-      class: `chip small stateful${relative?.overdue ? " overdue" : ""}`,
+      class: `chip small stateful${relative?.label === "Today" ? " ok" : relative?.overdue ? " overdue" : ""}`,
       "aria-label": "Change due date",
       onclick: () =>
         openDuePicker({

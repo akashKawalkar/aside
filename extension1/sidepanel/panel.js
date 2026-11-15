@@ -195,7 +195,7 @@ function taskRow(task, lead, index) {
     "button",
     {
       type: "button",
-      class: `chip small stateful due-chip${relative?.overdue ? " overdue" : ""}`,
+      class: `chip small stateful due-chip${relative?.label === "Today" ? " ok" : relative?.overdue ? " overdue" : ""}`,
       "aria-label": "Change due date",
       onclick: (e) => {
         e.stopPropagation();
@@ -593,6 +593,34 @@ el.modeChips.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- chat memory ----------
+// The thread keeps the last CHAT_MEMORY_SHOWN messages (kept in chrome.storage.local, so closing the panel does not
+// forget them). Only the last CHAT_MEMORY_SENT go to the service with a new message; the server trims again to its own
+// [llm] chat_memory_messages, so the panel and the config cannot disagree about cost.
+const CHAT_MEMORY_KEY = "chat_memory";
+const CHAT_MEMORY_SHOWN = 20;
+const CHAT_MEMORY_SENT = 10;
+let chatMemory = []; // [{ role: "user" | "assistant", text }], oldest first
+
+async function loadChatMemory() {
+  try {
+    const stored = (await chrome.storage.local.get(CHAT_MEMORY_KEY))[CHAT_MEMORY_KEY];
+    chatMemory = Array.isArray(stored) ? stored.slice(-CHAT_MEMORY_SHOWN) : [];
+  } catch {
+    chatMemory = [];
+  }
+  for (const turn of chatMemory) appendChatTurn(turn.role === "user" ? "user" : "agent", turn.text);
+}
+
+function rememberExchange(userText, replyText) {
+  chatMemory = [...chatMemory, { role: "user", text: userText }, { role: "assistant", text: replyText }].slice(-CHAT_MEMORY_SHOWN);
+  chrome.storage.local.set({ [CHAT_MEMORY_KEY]: chatMemory }).catch(() => {});
+  // Keep the visible thread to the same window, so a long session stays light.
+  while (el.chatThread.querySelectorAll(".chat-row").length > CHAT_MEMORY_SHOWN) {
+    el.chatThread.querySelector(".chat-row")?.remove();
+  }
+}
+
 // ---------- send ----------
 
 let sending = false;
@@ -612,7 +640,7 @@ async function handleSend(key = "enter") {
   setRing("spinning");
 
   try {
-    let envelope = await sendInput(text, mode, key);
+    let envelope = await sendInput(text, mode, key, mode === "chat" && key === "enter" ? chatMemory.slice(-CHAT_MEMORY_SENT) : []);
 
     if (envelope.status === "error" && envelope.offline) {
       if (await holdOffline(text, mode, key)) return;
@@ -640,6 +668,7 @@ async function handleSend(key = "enter") {
         (envelope.data?.fallback ? "Chat isn't wired up yet, so I saved that as a note." : "(no reply)");
       const notes = noteLines(envelope.data);
       appendChatTurn("agent", notes.length ? h("div", { class: "reply-with-notes" }, reply, ...notes) : reply);
+      if (destination === "chat_llm" && envelope.data?.reply) rememberExchange(text, envelope.data.reply);
     }
     if (destination === "find") {
       appendChatTurn("user", text);
@@ -834,6 +863,7 @@ async function init() {
   el.input.focus();
   updateSendState();
 
+  await loadChatMemory();
   await consumeRequestedMode();
   refreshPaused();
 
