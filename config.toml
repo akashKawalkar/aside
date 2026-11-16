@@ -50,6 +50,12 @@ chat_memory_messages = 10   # recent chat messages resent with each new one (5 e
 chat_memory_chars = 1200    # each remembered message is cut to this length
 fallback_model = "gemini-3.1-flash-lite"   # tried once if the chosen model is overloaded or silent; "" disables
 
+[planner]
+# Tune after a few weeks of real data. dial=0 plans only from what the person actually did; dial=1 plans the ideal day.
+dial = 0.3
+deep_work_target_slots = 12   # 6 hours of deep work in an ideal day; lower this if the data shows it is unrealistic
+ideal_block_slots = 3         # longest comfortable screen run in the ideal day (90 min)
+
 [patterns]
 lookback_days = 90
 min_occurrences = 3

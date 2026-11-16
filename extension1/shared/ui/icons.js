@@ -51,6 +51,8 @@ const PATHS = {
   play_arrow: "M8 5v14l11-7z",
   monitor:
     "M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z",
+  category:
+    "M12 2l-5.5 9h11zM3 13.5h8v8H3zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5z",
 };
 
 const NS = "http://www.w3.org/2000/svg";

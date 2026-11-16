@@ -18,8 +18,8 @@ IST = ZoneInfo("Asia/Kolkata")
 KEYS = ("anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist", "plan")
 CHECKLIST = (
     "every_free_slot_filled", "meditation_gap_respected", "all_tasks_due_tomorrow_placed", "deep_work_matches_dial",
-    "carryover_accounted_for", "long_term_goal_served", "no_screen_run_over_3_slots", "no_same_mode_back_to_back",
-    "at_least_one_outdoor_block",
+    "carryover_accounted_for", "long_term_goal_served", "no_screen_run_over_3_slots", "modes_alternate_across_work_blocks",
+    "no_topic_repeated_in_same_half", "all_work_blocks_at_least_2_slots", "at_least_one_outdoor_block",
 )
 
 

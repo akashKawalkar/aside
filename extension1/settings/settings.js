@@ -18,6 +18,7 @@ import { loadSkills } from "./tabs/skills.js";
 import { loadStatements } from "./tabs/statements.js";
 import { loadDrafts } from "./tabs/drafts.js";
 import { loadObservations } from "./tabs/observations.js";
+import { loadCategories } from "./tabs/categories.js";
 
 
 const shell = $("shell");
@@ -33,6 +34,7 @@ const tabLoaders = {
   review: loadReview,
   drafts: loadDrafts,
   observations: loadObservations,
+  categories: loadCategories,
   inspect: loadDiffLog,
   context: loadContext,
   "data-gaps": loadDataGaps,

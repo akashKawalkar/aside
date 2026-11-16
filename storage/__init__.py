@@ -70,6 +70,14 @@ from storage.repo.data_quality import (
 )
 from storage.repo.statements import insert_statement
 from storage.repo.observations import list_observations, upsert_observation, mark_observation_deleted
+from storage.repo.category_rules import (
+    approve_category_rule,
+    create_category_rule,
+    delete_category_rule,
+    list_category_rules,
+    save_suggested_rules,
+    update_category_rule,
+)
 from storage.repo.retention import prune
 __all__ = [
     "insert_monitoring_log", "list_monitoring_log", "insert_heartbeat_log", "list_heartbeats",

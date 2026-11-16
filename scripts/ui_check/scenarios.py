@@ -122,7 +122,7 @@ async def rule_based_and_failure(b, urls, shots):
 
 
 TABS = ["general", "tasks", "task-history", "schedule", "drafts", "observations", "review", "inspect", "context", "data-gaps",
-        "persistent-file", "skills", "statements", "notes", "tables", "ring-log"]
+        "persistent-file", "skills", "statements", "notes", "tables", "ring-log", "categories"]
 BAD_WORDS = ("failed to load", "couldn't load", "could not load", "unknown icon", "undefined", "[object object]")
 
 

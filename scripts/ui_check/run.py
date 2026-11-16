@@ -96,6 +96,11 @@ async def run(names, shots: Path) -> int:
             except Exception:
                 failures += 1
                 traceback.print_exc()
+                log_file = work / f"server-{name}.log"
+                if log_file.exists():
+                    print(f"--- {log_file.name} ---")
+                    print(log_file.read_text(encoding="utf-8", errors="replace"))
+                    print("--- end server log ---")
             finally:
                 stop(server)
                 await fixtures.clean()

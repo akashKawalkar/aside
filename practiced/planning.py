@@ -11,7 +11,7 @@ from datetime import date
 
 from llm.client import Message
 
-PROMPT_VERSION = 4
+PROMPT_VERSION = 5
 SLOTS = 48                                     # half-hour slots; the day runs 05:00 to 05:00, so slot 0 = 05:00 and slot 38 = 00:00
 DAY_START_MIN = 5 * 60                         # the logical day begins at 05:00 IST
 MODES = ("study", "build", "physical", "outdoor", "rest", "voice")
@@ -117,7 +117,9 @@ EXAMPLE_OUTPUT = {'anchors': {'wake_slot': 4,
                'carryover_accounted_for': {'ok': True, 'fix': ''},
                'long_term_goal_served': {'ok': True, 'fix': ''},
                'no_screen_run_over_3_slots': {'ok': True, 'fix': ''},
-               'no_same_mode_back_to_back': {'ok': True, 'fix': ''},
+               'modes_alternate_across_work_blocks': {'ok': True, 'fix': ''},
+               'no_topic_repeated_in_same_half': {'ok': True, 'fix': ''},
+               'all_work_blocks_at_least_2_slots': {'ok': True, 'fix': ''},
                'at_least_one_outdoor_block': {'ok': True, 'fix': ''}},
  'plan': [{'start_slot': 4, 'slots': 1, 'kind': 'anchor', 'title': 'Morning workout', 'mode': 'physical', 'why': 'daily workout, 20 minutes'},
           {'start_slot': 5,
@@ -231,8 +233,7 @@ How to work, in this exact order (your JSON fields follow the same order, facts 
    stretch in clock time, e.g. slots 10-15 are "10:00-13:00": slot 0 is 05:00, slot n starts at 05:00 + n x 30 minutes, and the end is the start of slot last+1) and evidence with
    counts ("4 of 5 days").
 4. "placement_notes": every deep block lies entirely inside a window you rated strong or weak, never in a risky or unrated stretch (only anchors, breaks
-   and shallow work go there). Tasks that
-   slipped often go early.
+   and shallow work go there). Tasks that slipped often go early.
 5. "checklist": for each line say ok true or false, and if false what fix you made in the plan. Be honest: the code checks the plan too.
 6. "plan": the final blocks.
 
@@ -241,8 +242,15 @@ Rules for the plan:
 - Keep the person busy: no planned leisure, no "free time", no optional blocks. Every block goes on a calendar, so each has a short "why".
 - kind is "anchor" (meal, workout, meditation), "work", or "break". mode is one of: {", ".join(MODES)}. A "work" block also has "depth": "deep"
   (hard thinking or building that moves the goal) or "shallow" (admin, reading, notes, applications, planning).
-- Screen work (modes study and build) never runs more than {MAX_SCREEN_RUN} slots in a row; then put an off-screen block. Do not put the same screen mode twice in a row:
-  alternate study and build. Meals, meditation and workout count as off-screen blocks, so use them before adding breaks.
+- Screen work (modes study and build) never runs more than {MAX_SCREEN_RUN} slots in a row; then put an off-screen block. Meals, meditation and workout count as
+  off-screen blocks, so use them before adding breaks.
+- Keep screen-work blocks grouped and long. Each work block must be at least 2 slots unless it is the last block before an anchor (meal, sleep) that
+  forces a shorter gap. Do not scatter 1-slot screen blocks across the schedule.
+- Do not put the same screen mode (study or build) in two consecutive work blocks. One study block, then a break or anchor, then a build block — or
+  vice versa. A break or anchor between two same-mode blocks is not enough: the modes must actually alternate across work blocks.
+- Each topic or project appears in at most one work block per half of the day (morning = wake to lunch, afternoon/evening = lunch to sleep). Do not
+  split "Study: VLLM" into two separate blocks or repeat "Build: personal-agent" twice in the evening. If you need more time on the same topic,
+  make that block longer, up to 3 slots.
 - Breaks are active, never leisure. Pick only from this menu: {", ".join(BREAK_MENU)}. A break takes one slot (two when it is a long one) and has
   "minutes" between 5 and 30 (5 only for a tiny routine such as soaking peanuts); its title names a menu item. A short meditation or short workout break does not replace the mandatory ones.
 - The whole 24 hours counts: outdoor items may go at any hour. Include at least one outdoor block.
@@ -256,6 +264,10 @@ Rules for the plan:
 
 Answer with one JSON object with exactly these keys in this order: "anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist", "plan"
 (and "feedback_constraints" first when re-planning).
+
+The checklist must include these keys (in this order): every_free_slot_filled, meditation_gap_respected, all_tasks_due_tomorrow_placed,
+deep_work_matches_dial, carryover_accounted_for, long_term_goal_served, no_screen_run_over_3_slots, modes_alternate_across_work_blocks,
+no_topic_repeated_in_same_half, all_work_blocks_at_least_2_slots, at_least_one_outdoor_block.
 
 EXAMPLE
 Day with a fixed event "Dentist" in slots 8-9 (07:00 is slot 4), one open task [task 7] "Renew passport form" (due tomorrow, slipped 3 times), IDEAL_WEIGHT 0.3,

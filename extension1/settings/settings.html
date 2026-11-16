@@ -34,6 +34,7 @@
       <button class="nav-item stateful" data-tab="context"><span class="nav-icon" data-icon="spark"></span><span class="nav-label">Context</span></button>
       <button class="nav-item stateful" data-tab="data-gaps"><span class="nav-icon" data-icon="monitor"></span><span class="nav-label">Data gaps</span></button>
       <button class="nav-item stateful" data-tab="observations"><span class="nav-icon" data-icon="event"></span><span class="nav-label">Patterns</span></button>
+      <button class="nav-item stateful" data-tab="categories"><span class="nav-icon" data-icon="category"></span><span class="nav-label">Categories</span></button>
       <button class="nav-item stateful" data-tab="persistent-file"><span class="nav-icon" data-icon="description"></span><span class="nav-label">Persistent file</span></button>
             <button class="nav-item stateful" data-tab="skills"><span class="nav-icon" data-icon="lightbulb"></span><span class="nav-label">Skills</span></button>
       <button class="nav-item stateful" data-tab="statements"><span class="nav-icon" data-icon="chat"></span><span class="nav-label">Statements</span></button>
@@ -258,6 +259,15 @@
           <p class="supporting">Repeated patterns from recorded schedules, sessions, and task changes. Schedule routines are marked with a question after two expected days are missed and dropped after three. Delete anything you do not want kept.</p>
         </header>
         <div id="observations-view" class="flex-column gap-3"></div>
+      </section>
+
+      <!-- Weekly category review & rules -->
+      <section class="tab-panel" id="tab-categories">
+        <header class="section-head">
+          <h2>Categories</h2>
+          <p class="supporting">Review weekly category suggestions from nightly digests and manage activity classification rules.</p>
+        </header>
+        <div id="categories-view" class="flex-column gap-3"></div>
       </section>
 
       <!-- Persistent file -->

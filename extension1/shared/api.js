@@ -323,3 +323,32 @@ export function getObservations() {
 export function deleteObservation(id) {
   return request(`/observations/${id}`, { method: "DELETE" });
 }
+
+// ---------- category rules ----------
+
+export function getCategoryRules(reviewOnly = false) {
+  const q = reviewOnly ? "?review=true" : "";
+  return request(`/categories/rules${q}`, { method: "GET" });
+}
+
+export function createCategoryRule(rule) {
+  return request("/categories/rules", {
+    method: "POST",
+    body: JSON.stringify(rule),
+  });
+}
+
+export function approveCategoryRule(id) {
+  return request(`/categories/rules/${id}/approve`, { method: "POST" });
+}
+
+export function updateCategoryRule(id, updates) {
+  return request(`/categories/rules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export function deleteCategoryRule(id) {
+  return request(`/categories/rules/${id}`, { method: "DELETE" });
+}

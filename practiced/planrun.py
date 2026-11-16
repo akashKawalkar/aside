@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from psycopg.rows import dict_row
 
 import storage
+from config import load_config
 from digital.builder import day_window
 from llm.client import Message
 from practiced import store
@@ -135,16 +136,29 @@ async def last_night(pool, now: datetime, day: date, patterns: dict, latest: dat
     return text, slot
 
 
+def _latest_in_progress(now: datetime, day: date) -> str | None:
+    """When the run is before 05:00 IST (yesterday's logical day has not fully closed), return a note for the prompt."""
+    day_start = datetime.combine(day, time(5, 0), IST)
+    if now < day_start:
+        mins_left = int((day_start - now).total_seconds() / 60)
+        return f"(in progress: device data captured up to {now:%H:%M} IST; the last ~{mins_left} minutes of this day are not yet recorded)"
+    return None
+
+
 async def gather(pool, now: datetime, client=None) -> tuple[PlanInputs, dict]:
     now = now.astimezone(IST)
     day = plan_day(now)
     latest = day - timedelta(days=1)
+    cfg = load_config().planner
+    dial, target_slots = cfg.dial, cfg.deep_work_target_slots
     stored = {d["day"]: d for d in await store.load_history(pool, day, HISTORY_DAYS)}
     live = await store.build_day(pool, latest, client=client)
+    in_progress_note = _latest_in_progress(now, day)
     stored[live["day"]] = live
     days = [stored[k] for k in sorted(stored)]
     patterns = compute_patterns(days, day)
-    budget, block = dial_numbers(patterns["daily_productive"]["median_min"], patterns["run_lengths"].get("p75", 30), DEFAULT_DIAL)
+    budget, block = dial_numbers(patterns["daily_productive"]["median_min"], patterns["run_lengths"].get("p75", 30), dial,
+                                 target_slots=target_slots)
 
     prefs = [(e["section"], e["text"]) for e in await storage.list_persistent_entries(pool, include_retired=False)]
     tasks = []
@@ -158,16 +172,18 @@ async def gather(pool, now: datetime, client=None) -> tuple[PlanInputs, dict]:
     ch = live.get("plan_changes")
     changed = json.dumps({k: v for k, v in ch.items() if v}) if ch and (ch["edited_after_accepting"] or ch["discarded"] or ch["added_by_user"] or ch["retimed_in_draft"]) else ""
     older = [d for d in days if d["day"] < live["day"]][-RECENT_SHOWN:]
+    latest_text = (in_progress_note + "\n" if in_progress_note else "") + render_day(live)
 
     inp = PlanInputs(
-        day=day, fixed=_fixed(await _existing(pool, day), day), tasks=tasks, preferences=prefs, latest_day=render_day(live),
+        day=day, fixed=_fixed(await _existing(pool, day), day), tasks=tasks, preferences=prefs, latest_day=latest_text,
         recent_days=[recent_day_line(p) for p in older], patterns=render_patterns(patterns),
         durations=render_durations(real_durations(days)), recent_work=recent_work(days, day), last_plan_vs_final=changed,
         journal=await _notes(pool, "journal", now - timedelta(days=2)), instructions=await _notes(pool, "plan", now - timedelta(days=1)),
-        rules=await _notes(pool, "rule", now - timedelta(days=3650)), dial=DEFAULT_DIAL, budget_slots=budget, block_slots=block,
+        rules=await _notes(pool, "rule", now - timedelta(days=3650)), dial=dial, budget_slots=budget, block_slots=block,
         last_night=text_night, expected_wake_slot=wake_slot,
     )
-    return inp, {"history_days": len(days), "budget_slots": budget, "latest_day": live["day"], "prompt_version": PROMPT_VERSION}
+    return inp, {"history_days": len(days), "budget_slots": budget, "latest_day": live["day"], "prompt_version": PROMPT_VERSION,
+                 "dial": dial, "in_progress": bool(in_progress_note)}
 
 
 # --- asking ---------------------------------------------------------------------------------------------------------------

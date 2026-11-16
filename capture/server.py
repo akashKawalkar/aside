@@ -57,6 +57,7 @@ from storage import (
     mark_observation_deleted,
 )
 from capture.context_routes import make_context_router
+from capture.category_routes import make_category_router
 from capture.data_routes import make_data_router
 from capture.persistent_routes import make_persistent_router
 from capture.heartbeat import heartbeat_files
@@ -449,6 +450,7 @@ def create_app(
     app.include_router(make_data_router(op_ok, op_error))
     app.include_router(make_persistent_router(op_ok, op_error, load_config().memory))
     app.include_router(make_schedule_gen_router(op_ok, op_error))
+    app.include_router(make_category_router(op_ok, op_error))
 
     @app.get("/observations", response_model=OperationResponse)
     async def observations() -> OperationResponse:

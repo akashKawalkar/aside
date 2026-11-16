@@ -54,6 +54,13 @@ class Llm(BaseModel):
     fallback_model: str = "gemini-3.1-flash-lite"      # tried once when the chosen model is overloaded (503) or silent; "" turns the fallback off
 
 
+class Planner(BaseModel):
+    """Dial and targets for the nightly planning call. Tune these after a few weeks of real data."""
+    dial: float = Field(default=0.3, ge=0.0, le=1.0)   # 0 = plan from what the person actually did, 1 = ideal day
+    deep_work_target_slots: int = Field(default=12, gt=0)   # target deep-work slots per day in an ideal day (12 = 6 h)
+    ideal_block_slots: int = Field(default=3, gt=0, le=6)   # longest comfortable screen run in the ideal day
+
+
 class Patterns(BaseModel):
     """Code-only observation thresholds; starting values to tune against real history."""
     lookback_days: int = Field(default=90, gt=0)
@@ -97,6 +104,7 @@ class Config(BaseModel):
     data_quality: DataQuality = DataQuality()
     memory: Memory = Memory()
     llm: Llm = Llm()
+    planner: Planner = Planner()
     patterns: Patterns = Patterns()
     privacy: Privacy = Privacy()
     cloud: Cloud = Cloud()

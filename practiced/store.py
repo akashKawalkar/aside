@@ -129,6 +129,8 @@ async def get_practiced(pool, day: date) -> dict | None:
 async def save_digest(pool, day: date, digest: dict) -> None:
     async with pool.connection() as conn:
         await conn.execute("UPDATE practiced_day SET digest = %s, digest_at = now() WHERE day = %s", (Jsonb(digest), day))
+    if digest.get("title_tags"):
+        await storage.save_suggested_rules(pool, digest["title_tags"])
 
 
 def finished_days(now: datetime, count: int) -> list[date]:
