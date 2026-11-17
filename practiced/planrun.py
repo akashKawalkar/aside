@@ -145,9 +145,10 @@ def _latest_in_progress(now: datetime, day: date) -> str | None:
     return None
 
 
-async def gather(pool, now: datetime, client=None) -> tuple[PlanInputs, dict]:
+async def gather(pool, now: datetime, client=None, *, day: date | None = None) -> tuple[PlanInputs, dict]:
+    """Everything the planning call reads. `day` defaults to the day the night run plans; a re-plan passes the day under way."""
     now = now.astimezone(IST)
-    day = plan_day(now)
+    day = day or plan_day(now)
     latest = day - timedelta(days=1)
     cfg = load_config().planner
     dial, target_slots = cfg.dial, cfg.deep_work_target_slots

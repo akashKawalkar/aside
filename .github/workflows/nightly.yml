@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly (the 02:00 run), morning_retry (the 03:00 run) or manual"
+        description: "nightly (the 02:00 run), morning_retry (the 03:00 run), manual, or replan (started by the phone)"
         default: nightly
         type: choice
-        options: [nightly, morning_retry, manual]
+        options: [nightly, morning_retry, manual, replan]
 
 concurrency:
   group: nightly

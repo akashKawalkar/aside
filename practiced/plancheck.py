@@ -34,7 +34,8 @@ def check(out: Any, inp: PlanInputs) -> list[str]:
     for k in KEYS:
         if k not in out:
             bad.append(f'The key "{k}" is missing.')
-    if inp.current_plan and "feedback_constraints" not in out:
+    replan = inp.replan_from is not None
+    if (inp.current_plan or replan) and "feedback_constraints" not in out:
         bad.append('The key "feedback_constraints" is missing (it comes first when re-planning).')
 
     anchors = out.get("anchors") if isinstance(out.get("anchors"), dict) else {}
@@ -43,7 +44,9 @@ def check(out: Any, inp: PlanInputs) -> list[str]:
         bad.append("anchors.wake_slot and anchors.sleep_slot must be whole slot numbers with wake_slot below sleep_slot (sleep_slot may be 48).")
         wake, sleep = 0, SLOTS
 
-    if inp.expected_wake_slot is not None and _is_int(wake) and abs(wake - inp.expected_wake_slot) > WAKE_TOLERANCE:
+    if replan and wake != inp.replan_from:
+        bad.append(f"anchors.wake_slot must be {inp.replan_from}, the slot the re-plan starts from.")
+    elif inp.expected_wake_slot is not None and _is_int(wake) and abs(wake - inp.expected_wake_slot) > WAKE_TOLERANCE:
         bad.append(f"anchors.wake_slot is {wake}, but the person is expected to wake at slot {inp.expected_wake_slot} (LAST NIGHT); stay within {WAKE_TOLERANCE} slots of it.")
 
     cl = out.get("checklist")
@@ -111,6 +114,8 @@ def check(out: Any, inp: PlanInputs) -> list[str]:
         prev = b
 
     meditation = next((b for b in ordered if b["kind"] == "anchor" and "medit" in b["title"].lower()), None)
+    if replan:      # the morning is gone: the day's mandatory blocks may already have happened, and the budget was for the whole day
+        return bad + _check_numbers(out, inp, ordered, wake, sleep, fixed_slots) + _task_ids(inp, ordered, due=False)
     if meditation is None:
         bad.append('The plan needs a meditation block (kind "anchor", title containing "Meditation").')
     if not any(b["kind"] == "anchor" and any(w in b["title"].lower() for w in ("workout", "exercise", "yoga")) for b in ordered):
@@ -124,14 +129,19 @@ def check(out: Any, inp: PlanInputs) -> list[str]:
         bad.append("The plan needs at least one outdoor block.")
 
     bad += _check_numbers(out, inp, ordered, wake, sleep, fixed_slots)
+    return bad + _task_ids(inp, ordered, due=True)
 
+
+def _task_ids(inp: PlanInputs, ordered: list[dict], *, due: bool) -> list[str]:
+    bad: list[str] = []
     known = {t["id"] for t in inp.tasks}
     used = [b.get("task_id") for b in ordered if b.get("task_id") is not None]
     bad += [f"task_id {t} is not an open task." for t in used if t not in known]
     if len(used) != len(set(used)):
         bad.append("A task is on more than one block; use one block per task.")
-    today_due = [t["id"] for t in inp.tasks if t.get("due") and str(t["due"])[:10] <= inp.day.isoformat()]
-    bad += [f"[task {t}] is due and has no block." for t in today_due if t not in used]
+    if due:
+        today_due = [t["id"] for t in inp.tasks if t.get("due") and str(t["due"])[:10] <= inp.day.isoformat()]
+        bad += [f"[task {t}] is due and has no block." for t in today_due if t not in used]
     return bad
 
 

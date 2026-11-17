@@ -83,6 +83,7 @@ class PlanInputs:
     expected_wake_slot: int | None = None                           # the slot of the expected wake-up; checked within WAKE_TOLERANCE
     feedback: str = ""                                              # re-plan only
     current_plan: list[dict] = field(default_factory=list)          # re-plan only
+    replan_from: int | None = None                                  # re-plan only: the first slot to plan; slots before it are past
 
 
 # --- the worked example (synthetic) ------------------------------------------------------------------------------------
@@ -322,10 +323,14 @@ def render_user(i: PlanInputs) -> str:
         out += ["", "REAL DURATIONS", i.durations]
     out += ["", "JOURNAL, LAST 2 DAYS"] + ([f"- {j}" for j in i.journal] or ["(none)"])
 
-    if i.current_plan:
-        out += ["", "CURRENT PLAN (keep what the feedback does not touch)", json.dumps(i.current_plan, ensure_ascii=False),
-                "", f"FEEDBACK: {i.feedback}"]
-    out += ["", f"Plan {i.day:%A %Y-%m-%d}."]
+    if i.replan_from is not None:
+        out += ["", f"RE-PLAN FROM SLOT {i.replan_from} ({slot_time(i.replan_from)}). The day is under way: slots before {i.replan_from} are past and marked FIXED. "
+                f"Set wake_slot to {i.replan_from} and plan only from there to sleep_slot. Workout, meditation and meals that already happened are in "
+                "the past, so add them only if their usual time is still ahead. Due tasks should still get a block if there is room."]
+    if i.current_plan or i.replan_from is not None:
+        out += ["", "CURRENT PLAN FOR THE REST OF THE DAY (keep what the feedback does not touch)",
+                json.dumps(i.current_plan, ensure_ascii=False) if i.current_plan else "(nothing planned)", "", f"FEEDBACK: {i.feedback}"]
+    out += ["", f"Re-plan the rest of {i.day:%A %Y-%m-%d}." if i.replan_from is not None else f"Plan {i.day:%A %Y-%m-%d}."]
     return "\n".join(out)
 
 

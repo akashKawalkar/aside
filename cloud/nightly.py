@@ -4,6 +4,7 @@
 #
 #   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> extract -> patterns -> digest -> plan -> calendar_push -> review
 #   morning_retry     calendar_pull -> digest -> plan -> calendar_push        (the same day again; a no-op if it is already planned)
+#   replan            calendar_pull -> replan -> calendar_push                (started by the phone: re-plan the rest of today, or undo)
 #
 # Both runs happen while the person sleeps (02:00 and 03:00 IST) and plan the day starting at 05:00. A failing step is recorded and
 # the run goes on to the next one (the plan does not wait for the review). Extract, the snapshot and the review look back at
@@ -24,6 +25,7 @@ from llm.approved import ApprovalRequired, Grant, QuotaExceeded, approved
 from llm.background import background_client
 from patterns.engine import run_patterns_once
 from practiced.planrun import plan_day, run_plan_once
+from practiced.replan import logical_day, process_pending
 from practiced.store import run_digest_once
 from review.daily import run_daily_once
 from review.store import DbBackend, ReviewStore
@@ -34,7 +36,8 @@ log = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 
 FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "extract", "patterns", "digest", "plan", "calendar_push", "review")
-STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "digest", "plan", "calendar_push")}
+STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "digest", "plan", "calendar_push"),
+         "replan": ("calendar_pull", "replan", "calendar_push")}
 ONCE = {"extract", "plan", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
 LOOKS_BACK = {"extract", "review"}        # these work on (and are recorded under) yesterday's calendar date
 NOT_RETRIED = (QuotaExceeded, ApprovalRequired)
@@ -124,17 +127,22 @@ async def run_nightly(
         with approved(Grant("background", operation="plan")):
             return await run_plan_once(pool, client or background_client(pool), now)
 
+    async def step_replan() -> dict:
+        # The phone's request: the newest pending re-plan or undo. Model errors are retried inside, so the request is answered once.
+        with approved(Grant("background", operation="plan")):
+            return await process_pending(pool, client or background_client(pool), now, attempts=cfg.cloud.retry_attempts)
+
     async def step_hook(hook: Hook | None) -> dict:
         return {"skipped": "not configured"} if hook is None else (await hook(now) or {})
 
     actions: dict[str, Callable[[], Awaitable[dict]]] = {
         "calendar_pull": lambda: step_hook(hooks.pull), "sessionize": step_sessionize, "daily": step_daily,
         "drop_stale": step_drop_stale, "extract": step_extract, "patterns": step_patterns, "digest": step_digest, "plan": step_plan,
-        "calendar_push": lambda: step_hook(hooks.push), "review": step_review,
+        "calendar_push": lambda: step_hook(hooks.push), "review": step_review, "replan": step_replan,
     }
 
     for step in STEPS[kind]:
-        day = result.day if step == "plan" else lived if step in LOOKS_BACK else today
+        day = result.day if step == "plan" else lived if step in LOOKS_BACK else logical_day(now) if step == "replan" else today
         # A look-back step done before its day was over (an older daytime run) does not count; the plan counts whenever.
         if step in ONCE and await storage.step_done(pool, day=day, step=step, after=lived_over if step in LOOKS_BACK else None):
             result.steps[step] = "skipped: already done"
