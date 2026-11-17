@@ -120,3 +120,30 @@ async def test_backfill_builds_only_missing_days_and_history_reads_them_back(poo
     assert (await store.backfill(pool, None, now, days=3))["built"] == []
     hist = await store.load_history(pool, date(2001, 3, 6), days=5)
     assert [h["day"] for h in hist] == ["2001-03-04"] and hist[0]["stats"]["productive_laptop_min"] == 60
+
+
+async def test_task_checks_and_debriefs_reach_the_nightly_text(pool):
+    """Sent the way the phone sends them (a tap with a subkind), they land on their own blocks and in the text the digest and
+    the plan step read."""
+    import uuid
+    from practiced.digest import render
+
+    ms = lambda d: int(d.timestamp() * 1000)  # noqa: E731
+    async with pool.connection() as conn:
+        await conn.execute("INSERT INTO schedule (title, start_at, end_at, origin) VALUES ('zz Email', %s, %s, 'user')", (t(9, 30), t(10)))
+        await conn.execute("INSERT INTO schedule (title, start_at, end_at, origin) VALUES ('zz Deep work', %s, %s, 'user')", (t(10), t(12)))
+        rows = [
+            {"id": str(uuid.uuid4()), "kind": "tap", "at": t(9, 52).isoformat(), "payload": {
+                "zz": 1, "subkind": "task_check", "title": "zz Deep work", "status": "blocked", "text": "waiting on API keys", "block_start": ms(t(10))}},
+            {"id": str(uuid.uuid4()), "kind": "tap", "at": t(12, 5).isoformat(), "payload": {
+                "zz": 1, "subkind": "debrief", "title": "zz Deep work", "outcome": "continue_tomorrow", "block_end": ms(t(12))}},
+        ]
+        await conn.execute("SELECT upload_answers(%s::jsonb)", (json.dumps(rows),))
+    await store.save_tags(pool, {"zz Email": Tag((), False), "zz Deep work": Tag(("coding",), True)})
+    r = await store.build_day(pool, DAY)
+    email, deep = r["plan"]
+    assert "task_check" not in email and "debrief" not in email
+    assert deep["task_check"]["status"] == "blocked" and deep["debrief"]["outcome"] == "continue_tomorrow"
+    text = render(r)
+    assert 'the person said just before it (task check): blocked / needs info "waiting on API keys"' in text
+    assert "the person said after it (debrief): continuing tomorrow" in text

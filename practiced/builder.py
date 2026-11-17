@@ -108,6 +108,17 @@ def _self_report(title: str, tag: Tag | None, evening: dict | None) -> str | Non
     return None
 
 
+def _answer_for(answers: list[dict] | None, kind: str, title: str, at: datetime, key: str) -> dict | None:
+    """The newest task check / debrief about this block. The phone sends the block's title and its start (task check) or
+    end (debrief) in epoch ms; both must match, so a neighbouring block (or a second "Deep work" the same day) never
+    takes it. An answer without that time matches by title alone."""
+    mine = [a for a in answers or [] if a["kind"] == kind and (a["payload"].get("title") or "").strip() == title.strip()]
+    exact = [a for a in mine if isinstance(a["payload"].get(key), (int, float))
+             and abs(a["payload"][key] / 1000 - at.timestamp()) <= 60]
+    pick = exact or [a for a in mine if not isinstance(a["payload"].get(key), (int, float))]
+    return pick[-1]["payload"] if pick else None
+
+
 def plan_block(p: Plan, tag: Tag | None, digital: dict, answers: list[dict] | None = None, evening: dict | None = None) -> dict:
     entries, idle = [], 0.0
     for track in ("laptop", "phone"):
@@ -136,6 +147,12 @@ def plan_block(p: Plan, tag: Tag | None, digital: dict, answers: list[dict] | No
     reasons = [r for r in (_reason(a) for a in answers or [] if a["kind"] == "distraction" and p.start <= a["answered_at"] < p.end) if r]
     if reasons:
         block["reasons"] = reasons
+    tc = _answer_for(answers, "task_check", p.title, p.start, "block_start")
+    if tc:
+        block["task_check"] = tc
+    db = _answer_for(answers, "debrief", p.title, p.end, "block_end")
+    if db:
+        block["debrief"] = db
     said = _self_report(p.title, tag, evening)
     if said:
         block["self_report"] = said

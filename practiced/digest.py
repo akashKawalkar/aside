@@ -40,6 +40,17 @@ def _reason(r: dict) -> str:
     return ", ".join(str(b) for b in bits)
 
 
+TASK_CHECK = {"already_done": "already done", "starting_now": "starting now", "blocked": "blocked / needs info",
+              "not_today": "not today", "note": "left a note"}
+DEBRIEF = {"continue_tomorrow": "continuing tomorrow", "finished": "finished", "paused": "paused / shelved"}
+
+
+def _said(a: dict, key: str, words: dict) -> str:
+    """A task check or debrief answer as a short phrase, with the person's own words quoted."""
+    v = a.get(key)
+    return words.get(v, str(v or "no choice")) + (f' "{a["text"]}"' if a.get("text") else "")
+
+
 def render(p: dict) -> str:
     """The practiced schedule as plain text, time-ordered, the way the design sketches it."""
     out = [f"DAY {p['day']}" + (f" (the person said this day was: {p['context']})" if p.get("context", "normal") != "normal" else ""),
@@ -51,6 +62,10 @@ def render(p: dict) -> str:
                    + (f' | the person said: {b["self_report"]}' if b.get("self_report") else ""))
         out += [f"     {_line(a)}" for a in b["activities"]]
         out += [f"     the person gave a reason at {r['at']}: {_reason(r)}" for r in b.get("reasons", [])]
+        if b.get("task_check"):
+            out.append(f"     the person said just before it (task check): {_said(b['task_check'], 'status', TASK_CHECK)}")
+        if b.get("debrief"):
+            out.append(f"     the person said after it (debrief): {_said(b['debrief'], 'outcome', DEBRIEF)}")
     if not p["plan"]:
         out.append("(no calendar blocks this day)")
     out += ["", "OUTSIDE THE PLAN (30m or more, not idle)"]

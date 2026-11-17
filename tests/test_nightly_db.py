@@ -236,3 +236,32 @@ async def test_a_day_that_already_has_a_generated_plan_is_left_alone(pool):
 
     assert result.steps["plan"] == "skipped: day_already_planned" and fake.attempts == 0
     assert [r["title"] for r in await schedule_rows(pool)] == ["zz Earlier plan"]
+
+
+async def test_yesterdays_task_check_and_debrief_reach_the_plan_prompt(pool):
+    """Sent the way the phone sends them (a tap with a subkind); the night run shows them to the planner on yesterday's blocks."""
+    import uuid
+
+    y = DAY - timedelta(days=1)
+    ms = lambda d: int(d.timestamp() * 1000)  # noqa: E731
+    await storage.create_schedule_entry(pool, title="zz Deep work", start_at=at(14, day=y), end_at=at(16, day=y))
+    rows = [
+        {"id": str(uuid.uuid4()), "kind": "tap", "at": at(13, 52, day=y).isoformat(), "payload": {
+            "subkind": "task_check", "title": "zz Deep work", "status": "blocked", "text": "waiting on API keys", "block_start": ms(at(14, day=y))}},
+        {"id": str(uuid.uuid4()), "kind": "tap", "at": at(16, 10, day=y).isoformat(), "payload": {
+            "subkind": "debrief", "title": "zz Deep work", "outcome": "continue_tomorrow", "text": "half the tests left", "block_end": ms(at(16, day=y))}},
+    ]
+    try:
+        async with pool.connection() as conn:
+            await conn.execute("SELECT upload_answers(%s::jsonb)", (json.dumps(rows),))
+        await fixed_dentist(pool)
+        task = await due_task(pool)
+        fake = Flaky([reply(task["id"])] * 3, fail=0)
+        result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
+        assert result.steps["digest"] == "ok" and result.steps["plan"] == "ok", result.steps
+        prompt = next(c.messages[1].content for c in fake.calls if "SLOT GRID" in c.messages[1].content)
+        assert 'the person said just before it (task check): blocked / needs info "waiting on API keys"' in prompt
+        assert 'the person said after it (debrief): continuing tomorrow "half the tests left"' in prompt
+    finally:
+        async with pool.connection() as conn:
+            await conn.execute("DELETE FROM phone_answer WHERE day >= '2031-01-01'")

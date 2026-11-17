@@ -45,9 +45,17 @@ async def load_answers(pool, day: date) -> tuple[list[dict], str | None]:
     try:
         async with pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute("SELECT kind, answered_at, payload FROM phone_answer WHERE day = %s AND kind IN ('distraction', 'sleep', 'evening') "
-                                  "ORDER BY answered_at", (day,))
-                answers = [{**r, "answered_at": r["answered_at"].astimezone(IST)} for r in await cur.fetchall()]
+                await cur.execute(
+                    "SELECT kind, answered_at, payload FROM phone_answer WHERE day = %s "
+                    "AND (kind IN ('distraction', 'sleep', 'evening', 'task_check', 'debrief') "
+                    "     OR (kind = 'tap' AND payload ? 'subkind')) "
+                    "ORDER BY answered_at", (day,)
+                )
+                raw_answers = await cur.fetchall()
+                answers = []
+                for r in raw_answers:
+                    k = r["payload"].get("subkind") if r["kind"] == "tap" and "subkind" in r["payload"] else r["kind"]
+                    answers.append({**r, "kind": k, "answered_at": r["answered_at"].astimezone(IST)})
                 await cur.execute("SELECT payload->>'label' AS label FROM phone_answer WHERE kind = 'anomaly' AND payload->>'for_day' = %s "
                                   "ORDER BY answered_at DESC LIMIT 1", (day.isoformat(),))
                 row = await cur.fetchone()
