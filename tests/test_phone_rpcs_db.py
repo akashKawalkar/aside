@@ -230,13 +230,23 @@ async def test_schedule_is_ready_after_a_successful_generate_even_if_it_skipped(
     assert await ready(pool, date(2001, 1, 4)) is False
 
 
-async def test_schedule_is_ready_when_the_day_has_an_entry(pool, job_cleanup):
+async def test_schedule_is_ready_after_the_plan_step_too(pool, job_cleanup):
+    day = date(2001, 1, 3)
+    await job(pool, "plan", False, error="boom")
+    assert await ready(pool, day) is False
+    await job(pool, "plan", True, detail='{"skipped": "day_already_planned"}')
+    assert await ready(pool, day) is True
+
+
+async def test_generated_blocks_make_a_day_ready_but_the_persons_own_events_do_not(pool, job_cleanup):
     async with pool.connection() as conn:
-        await conn.execute(
-            "INSERT INTO schedule (title, start_at, end_at, origin) VALUES ('zz gym', %s, %s, 'user')",
-            (datetime(2001, 1, 5, 3, 0, tzinfo=timezone.utc), datetime(2001, 1, 5, 4, 0, tzinfo=timezone.utc)),
-        )
-    assert await ready(pool, date(2001, 1, 5)) is True        # 08:30 IST on the 5th
+        for origin, d in (("user", 5), ("generated", 6)):
+            await conn.execute(
+                "INSERT INTO schedule (title, start_at, end_at, origin) VALUES ('zz gym', %s, %s, %s)",
+                (datetime(2001, 1, d, 3, 0, tzinfo=timezone.utc), datetime(2001, 1, d, 4, 0, tzinfo=timezone.utc), origin),
+            )
+    assert await ready(pool, date(2001, 1, 5)) is False       # a dentist pulled from Google is not a plan
+    assert await ready(pool, date(2001, 1, 6)) is True        # 08:30 IST on the 6th
 
 
 async def test_a_failure_is_reported_only_when_it_is_the_last_word_and_old_enough(pool, job_cleanup):

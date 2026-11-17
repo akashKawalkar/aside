@@ -24,8 +24,8 @@ RUN_HOUR = 2        # IST; yesterday is complete by then
 async def run_extractor_once(
     pool: AsyncConnectionPool, background_enabled: bool, now: datetime | None = None, *, day: date | None = None, client=None,
 ) -> int:
-    """Extract candidate items for `day` (default: yesterday, IST). The nightly job passes today, so a journal typed at
-    20:45 counts. `client` is a gated client built by the caller (tests, the nightly job). Returns how many were stored;
+    """Extract candidate items for `day` (default: yesterday, IST). The nightly job runs after midnight and passes the
+    calendar day that just ended. `client` is a gated client built by the caller (tests, the nightly job). Returns how many were stored;
     0 when background calls are off."""
     if not background_enabled:
         return 0

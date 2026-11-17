@@ -107,3 +107,25 @@ async def test_extractor_skips_malformed_items_and_keeps_the_rest(pool):
 async def test_extractor_worker_does_nothing_while_background_is_off(pool):
     from extractor.worker import run_extractor_once
     assert await run_extractor_once(pool, False) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_second_pass_over_the_day_only_sends_statements_with_no_items_yet(pool):
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            ids = []
+            for text in ("I like cheese", "Gym at 7 tomorrow"):
+                await cur.execute("INSERT INTO statements (text, source, created_at) VALUES (%s, 'note', '2001-01-02 12:00:00+05:30') RETURNING id", (text,))
+                ids.append((await cur.fetchone())[0])
+    try:
+        first = json.dumps({"items": [{"type": "preference", "text": "Likes cheese", "source_id": str(ids[0]), "valid_from": "2001-01-02"}]})
+        assert len(await extract_for_day(FakeClient([Completion(first, "fake")]), pool, date(2001, 1, 2))) == 1
+        again = FakeClient([Completion("{}", "fake")])
+        await extract_for_day(again, pool, date(2001, 1, 2))
+        sent = again.calls[0].messages[1].content
+        assert f"[{ids[1]}]" in sent and f"[{ids[0]}]" not in sent        # the cheese is not extracted twice
+    finally:
+        async with pool.connection() as conn:
+            await conn.execute("DELETE FROM candidate_items WHERE source_id = ANY(%s)", ([str(i) for i in ids],))
+        for i in ids:
+            await delete_statement(pool, i)

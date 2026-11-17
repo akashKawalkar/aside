@@ -265,3 +265,24 @@ async def test_yesterdays_task_check_and_debrief_reach_the_plan_prompt(pool):
     finally:
         async with pool.connection() as conn:
             await conn.execute("DELETE FROM phone_answer WHERE day >= '2031-01-01'")
+
+
+async def test_the_night_run_reviews_and_snapshots_the_day_that_just_ended_not_the_new_date(pool):
+    lived = DAY - timedelta(days=1)
+    await storage.insert_job_run(pool, kind="manual", step="review", day=lived, ok=True)    # a daytime run, before the day was over
+    task = await due_task(pool)
+    await fixed_dentist(pool)
+    result = await run_nightly(pool, now=NOW, client=gated(pool, Flaky([reply(task["id"])], fail=0)))
+
+    assert result.steps["review"] == "ok" and result.steps["extract"] == "ok"           # the early review did not count
+    back = {r["step"] for r in await storage.list_job_runs(pool, day=lived)}
+    assert {"extract", "review"} <= back and not {"extract", "review"} & {r["step"] for r in await storage.list_job_runs(pool, day=DAY)}
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT value->>'date' FROM review_state WHERE key = 'latest'")
+            assert (await cur.fetchone())[0] == lived.isoformat()
+            await cur.execute("SELECT day FROM schedule_snapshot WHERE day >= '2031-01-01'")
+            assert DAY not in {r[0] for r in await cur.fetchall()}        # the new day is photographed after its plan, at 23:55
+            await cur.execute("UPDATE job_run SET finished_at = %s WHERE day >= '2031-01-01' AND kind = 'nightly'", (NOW,))  # the fake clock
+    again = await run_nightly(pool, now=NOW + timedelta(hours=1), kind="nightly", client=gated(pool, FakeClient([], profile=PROFILE)))
+    assert again.steps["review"] == "skipped: already done" and again.steps["extract"] == "skipped: already done"

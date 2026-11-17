@@ -9,7 +9,7 @@ from config import Privacy, load_config
 from context.privacy import denied_reason
 from llm.client import Message, LLMClient
 from psycopg_pool import AsyncConnectionPool
-from storage.repo.statements import get_statements_for_day, insert_candidate_item
+from storage.repo.statements import get_statements_for_day, insert_candidate_item, statement_ids_with_items
 
 ITEM_TYPES = {"actual", "plan", "prediction", "constraint", "preference"}
 
@@ -52,6 +52,8 @@ async def extract_for_day(
     rules = privacy or load_config().privacy
     statements = [s for s in await get_statements_for_day(pool, target_date)
                   if denied_reason(s["source"], (s["source"],), rules) is None]
+    done = await statement_ids_with_items(pool, [s["id"] for s in statements])
+    statements = [s for s in statements if s["id"] not in done]      # a second pass over the day never repeats an item
     if not statements:
         return []
 

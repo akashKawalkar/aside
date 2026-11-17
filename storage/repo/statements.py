@@ -74,3 +74,13 @@ async def get_statements_for_day(pool: AsyncConnectionPool, target_date) -> List
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute("SELECT * FROM statements WHERE date(created_at AT TIME ZONE 'Asia/Kolkata') = %s ORDER BY id", (target_date,))
             return await cur.fetchall()
+
+
+async def statement_ids_with_items(pool: AsyncConnectionPool, ids: List[int]) -> set[int]:
+    """Which of these statements already produced a candidate item (so a second extraction of the day skips them)."""
+    if not ids:
+        return set()
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT DISTINCT source_id FROM candidate_items WHERE source_id = ANY(%s)", ([str(i) for i in ids],))
+            return {int(r[0]) for r in await cur.fetchall() if str(r[0]).isdigit()}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from psycopg.rows import dict_row
@@ -20,13 +20,15 @@ async def insert_job_run(pool, *, kind: str, step: str, day: date | None, ok: bo
             return (await cur.fetchone())[0]
 
 
-async def step_done(pool, *, day: date, step: str) -> bool:
-    """Did this step already succeed for this day (and did it do something, not just skip)? Makes reruns a no-op."""
+async def step_done(pool, *, day: date, step: str, after: datetime | None = None) -> bool:
+    """Did this step already succeed for this day (and did it do something, not just skip)? Makes reruns a no-op.
+    `after`: only a run that finished at or after this counts (a review written before its day was over does not)."""
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "SELECT 1 FROM job_run WHERE day = %s AND step = %s AND ok AND coalesce(detail->>'skipped', '') = '' LIMIT 1",
-                (day, step),
+                "SELECT 1 FROM job_run WHERE day = %s AND step = %s AND ok AND coalesce(detail->>'skipped', '') = ''"
+                " AND (%s::timestamptz IS NULL OR finished_at >= %s::timestamptz) LIMIT 1",
+                (day, step, after, after),
             )
             return await cur.fetchone() is not None
 

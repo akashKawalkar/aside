@@ -6,13 +6,14 @@
 #   morning_retry     calendar_pull -> digest -> plan -> calendar_push        (the same day again; a no-op if it is already planned)
 #
 # Both runs happen while the person sleeps (02:00 and 03:00 IST) and plan the day starting at 05:00. A failing step is recorded and
-# the run goes on to the next one (the plan does not wait for the review). The plan step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
+# the run goes on to the next one (the plan does not wait for the review). Extract, the snapshot and the review look back at
+# the calendar day that just ended (`lived`), never at the hours-old new date. The plan step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
 from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -35,6 +36,7 @@ IST = ZoneInfo("Asia/Kolkata")
 FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "extract", "patterns", "digest", "plan", "calendar_push", "review")
 STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "digest", "plan", "calendar_push")}
 ONCE = {"extract", "plan", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
+LOOKS_BACK = {"extract", "review"}        # these work on (and are recorded under) yesterday's calendar date
 NOT_RETRIED = (QuotaExceeded, ApprovalRequired)
 
 Hook = Callable[[datetime], Awaitable[dict[str, Any] | None]]
@@ -72,6 +74,8 @@ async def run_nightly(
         raise ValueError(f"kind must be one of {', '.join(STEPS)}")
     now = (now or datetime.now(IST)).astimezone(IST)
     today, cfg, hooks = now.date(), load_config(), hooks or Hooks()
+    lived = today - timedelta(days=1)          # the calendar day that ended at the last midnight: what extract and review read
+    lived_over = datetime.combine(today, time.min, tzinfo=IST)
     result = NightlyResult(kind=kind, day=target_day(kind, now))
     generator = make_review_generator(pool)
 
@@ -86,9 +90,9 @@ async def run_nightly(
         return {"days": out.days, "created": out.created}
 
     async def step_daily() -> dict:
-        # The laptop writes today's snapshot after 23:55; the job runs earlier, so take it now (a later pull may refine it).
-        dq = cfg.data_quality.model_copy(update={"snapshot_time": "00:00"})
-        written = await run_daily_once(pool, generator, dq, now=now)
+        # After midnight: yesterday's snapshot (if the laptop was off at 23:55) and its day record. The new day's snapshot
+        # waits for its own 23:55, after the plan step has filled it.
+        written = await run_daily_once(pool, generator, cfg.data_quality, now=now)
         return {k: [d.isoformat() for d in v] for k, v in written.items()}
 
     async def step_drop_stale() -> dict:
@@ -97,7 +101,7 @@ async def run_nightly(
     async def step_extract() -> dict:
         if not cfg.llm.background_enabled:
             return {"skipped": "background model calls are disabled"}
-        return {"items": await run_extractor_once(pool, True, now, day=today, client=client or background_client(pool))}
+        return {"items": await run_extractor_once(pool, True, now, day=lived, client=client or background_client(pool))}
 
     async def step_patterns() -> dict:
         return {"observations": await run_patterns_once(pool, cfg.patterns, now=now)}
@@ -111,9 +115,9 @@ async def run_nightly(
 
     async def step_review() -> dict:
         store = ReviewStore(DbBackend(pool))
-        review = await generator.generate(review_date=today)
+        review = await generator.generate(review_date=lived)
         await store.save_latest(review)
-        return {"date": today.isoformat()}
+        return {"date": lived.isoformat()}
 
     async def step_plan() -> dict:
         # The day's plan, from the practiced history, patterns and the person's answers; checked, re-asked on violations.
@@ -130,8 +134,9 @@ async def run_nightly(
     }
 
     for step in STEPS[kind]:
-        day = result.day if step == "plan" else today
-        if step in ONCE and await storage.step_done(pool, day=day, step=step):
+        day = result.day if step == "plan" else lived if step in LOOKS_BACK else today
+        # A look-back step done before its day was over (an older daytime run) does not count; the plan counts whenever.
+        if step in ONCE and await storage.step_done(pool, day=day, step=step, after=lived_over if step in LOOKS_BACK else None):
             result.steps[step] = "skipped: already done"
             continue
 
