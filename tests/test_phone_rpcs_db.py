@@ -94,21 +94,51 @@ async def test_converting_between_note_and_task_moves_the_row(pool):
     await capture(pool, cid, "note", "zz convert me")
     await capture(pool, cid, "task", "zz convert me")
     assert await count(pool, "SELECT count(*) FROM notes WHERE client_id = %s", cid) == 0
-    assert await count(pool, "SELECT count(*) FROM tasks WHERE client_id = %s", cid) == 1
+    assert await count(pool, "SELECT count(*) FROM tasks WHERE client_id = %s AND status = 'pending'", cid) == 1
+    async with pool.connection() as conn:       # as if the sync had pushed it to Google Tasks
+        await conn.execute("UPDATE tasks SET gtask_id = 'g-zz', gtask_updated = now() WHERE client_id = %s", (cid,))
     await capture(pool, cid, "note", "zz convert me")
     assert await count(pool, "SELECT count(*) FROM notes WHERE client_id = %s", cid) == 1
-    assert await count(pool, "SELECT count(*) FROM tasks WHERE client_id = %s", cid) == 0
+    # dropped, not erased, so the sync removes it from Google Tasks instead of importing it back
+    assert await one(pool, "SELECT status, dropped_reason, gtask_id FROM tasks WHERE client_id = %s", cid) == (
+        "dropped", "changed to a note on the phone", "g-zz")
+    await capture(pool, cid, "task", "zz convert me")       # and back: pending again, pushed to Google afresh
+    assert await one(pool, "SELECT status, dropped_at, gtask_id FROM tasks WHERE client_id = %s", cid) == ("pending", None, None)
 
 
-async def test_delete_removes_either_kind_and_is_repeatable(pool):
+async def test_delete_removes_a_note_and_drops_an_open_task_and_is_repeatable(pool):
     n, t = uuid.uuid4(), uuid.uuid4()
     await capture(pool, n, "note", "zz gone note")
     await capture(pool, t, "task", "zz gone task")
-    for cid in (n, t, n):
+    for cid in (n, t, n, t):
         async with pool.connection() as conn:
             await conn.execute("SELECT delete_item(%s)", (cid,))
     assert await count(pool, "SELECT count(*) FROM notes WHERE text = 'zz gone note'") == 0
-    assert await count(pool, "SELECT count(*) FROM tasks WHERE text = 'zz gone task'") == 0
+    assert await one(pool, "SELECT status, dropped_reason FROM tasks WHERE text = 'zz gone task'") == ("dropped", "deleted on the phone")
+
+
+async def test_deleting_a_completed_task_keeps_it_completed(pool):
+    t = uuid.uuid4()
+    await capture(pool, t, "task", "zz done task")
+    async with pool.connection() as conn:
+        await conn.execute("UPDATE tasks SET status = 'completed', completed_at = now() WHERE client_id = %s", (t,))
+        await conn.execute("SELECT delete_item(%s)", (t,))
+    assert await one(pool, "SELECT status, dropped_at FROM tasks WHERE client_id = %s", t) == ("completed", None)
+
+
+async def test_task_status_reports_the_phones_tasks(pool):
+    a, b, c, missing = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    for cid in (a, b, c):
+        await capture(pool, cid, "task", f"zz status {cid}")
+    async with pool.connection() as conn:
+        await conn.execute("UPDATE tasks SET status = 'completed', completed_at = '2001-01-02 10:00+00' WHERE client_id = %s", (b,))
+        await conn.execute("SELECT delete_item(%s)", (c,))
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT client_id, status, closed_at FROM task_status(%s)", ([a, b, c, missing],))
+            got = {r[0]: (r[1], r[2]) for r in await cur.fetchall()}
+    assert set(got) == {a, b, c}
+    assert got[a] == ("pending", None) and got[b][0] == "completed" and got[b][1].year == 2001
+    assert got[c][0] == "dropped" and got[c][1] is not None
 
 
 async def test_bad_input_is_refused(pool):
