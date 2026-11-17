@@ -5,7 +5,7 @@
 #   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> extract -> patterns -> digest -> plan -> calendar_push -> review
 #   morning_retry     calendar_pull -> digest -> plan -> calendar_push        (the same day again; a no-op if it is already planned)
 #
-# Both runs happen while the person sleeps (04:00 and 05:00 IST) and plan the day starting at 05:00. A failing step is recorded and
+# Both runs happen while the person sleeps (02:00 and 03:00 IST) and plan the day starting at 05:00. A failing step is recorded and
 # the run goes on to the next one (the plan does not wait for the review). The plan step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class NightlyResult:
 
 def target_day(kind: str, now: datetime) -> date:
     """The day being planned: the logical day (05:00 to 05:00) that starts on the run's own date. Both runs happen while the
-    person sleeps, at 04:00 and 05:00 IST, so both plan the day about to begin."""
+    person sleeps, at 02:00 and 03:00 IST, so both plan the day about to begin."""
     return plan_day(now)
 
 

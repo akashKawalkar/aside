@@ -1,7 +1,7 @@
 """The nightly plan: gather everything from the database, ask the model, check the answer, save it as the day's plan.
 
-The plan is for the logical day that starts at 05:00 on the run's calendar date. The job runs while the person sleeps (04:00 and
-05:00 IST), so the newest day it knows is still open or has just closed; it is built live and handed to the model in full.
+The plan is for the logical day that starts at 05:00 on the run's calendar date. The job runs while the person sleeps (02:00 and
+03:00 IST), so the newest day it knows is still open or has just closed; it is built live and handed to the model in full.
 A bad answer is re-asked up to twice with the violations listed; after that the call raises and the night job reports a failure
 (no template fallback). Saved as an `llm` draft (inputs.planner = true) and accepted at once, like the earlier unattended generator.
 """
@@ -43,7 +43,7 @@ class PlanError(RuntimeError):
 
 
 def plan_day(now: datetime) -> date:
-    """The logical day (05:00 to 05:00) being planned: the run's calendar date. A run at 04:00 or 05:00 plans the day that starts at 05:00."""
+    """The logical day (05:00 to 05:00) being planned: the run's calendar date. A run at 02:00 or 03:00 plans the day that starts at 05:00."""
     return now.astimezone(IST).date()
 
 

@@ -5,12 +5,12 @@ name: nightly
 
 on:
   schedule:
-    - cron: "30 22 * * *"   # 04:00 IST: the night run (plans the day that starts at 05:00)
-    - cron: "30 23 * * *"   # 05:00 IST: the retry (the same day, a no-op if it is already planned)
+    - cron: "30 20 * * *"   # 02:00 IST: the night run (plans the day that starts at 05:00)
+    - cron: "30 21 * * *"   # 03:00 IST: the retry (the same day, a no-op if it is already planned)
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly (the 04:00 run), morning_retry (the 05:00 run) or manual"
+        description: "nightly (the 02:00 run), morning_retry (the 03:00 run) or manual"
         default: nightly
         type: choice
         options: [nightly, morning_retry, manual]
@@ -42,5 +42,5 @@ jobs:
           AGENT_BACKGROUND_ENABLED: "1"
           AGENT_NIGHTLY_IN_ACTION: "1"
           TZ: UTC
-          KIND: ${{ github.event.inputs.kind || (github.event.schedule == '30 23 * * *' && 'morning_retry') || 'nightly' }}
+          KIND: ${{ github.event.inputs.kind || (github.event.schedule == '30 21 * * *' && 'morning_retry') || 'nightly' }}
         run: python -m cloud "$KIND"

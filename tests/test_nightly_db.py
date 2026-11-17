@@ -1,6 +1,6 @@
 """The nightly job end to end against the (test) database with a FakeClient and a fixed 2031 clock: the plan for the day that
 starts at 05:00, a model failure then a retry, a bad answer re-asked with its violations, a spent quota, reruns being no-ops,
-and the 05:00 retry. A real model is never called. Everything created is `zz`-titled or dated 2031 and removed afterwards."""
+and the 03:00 retry. A real model is never called. Everything created is `zz`-titled or dated 2031 and removed afterwards."""
 from __future__ import annotations
 
 import copy
@@ -18,7 +18,7 @@ from llm.fake import FakeClient
 from practiced.planning import EXAMPLE_OUTPUT
 from schedule_gen.model import IST
 
-NOW = datetime(2031, 3, 4, 4, 0, tzinfo=IST)           # 04:00 on Tuesday: the night run plans the day that starts at 05:00
+NOW = datetime(2031, 3, 4, 2, 0, tzinfo=IST)           # 02:00 on Tuesday: the night run plans the day that starts at 05:00
 DAY = date(2031, 3, 4)
 PROFILE = ModelProfile(name="fake-gen", provider="fake", window=1_000_000, input_cost=1.0, output_cost=2.0,
                        supports_tools=True, supports_json=True)
@@ -211,8 +211,8 @@ async def test_background_tier_off_means_a_clear_failure_not_a_call(pool, monkey
     assert result.steps["extract"].startswith("skipped")
 
 
-async def test_the_five_o_clock_retry_plans_the_day_when_the_night_failed_and_is_a_noop_otherwise(pool):
-    retry_at = datetime(2031, 3, 4, 5, 0, tzinfo=IST)
+async def test_the_three_o_clock_retry_plans_the_day_when_the_night_failed_and_is_a_noop_otherwise(pool):
+    retry_at = datetime(2031, 3, 4, 3, 0, tzinfo=IST)
     await fixed_dentist(pool)
     task = await due_task(pool)
     await run_nightly(pool, now=NOW, client=gated(pool, Flaky([reply(task["id"])], fail=9)))      # the night run failed
