@@ -8,9 +8,10 @@
 #
 # Both runs happen while the person sleeps (02:00 and 03:00 IST) and plan the day starting at 05:00. A failing step is recorded and
 # the run goes on to the next one (the plan does not wait for the review). Extract, the snapshot and the review look back at
-# the calendar day that just ended (`lived`), never at the hours-old new date. The plan step is tried `[cloud] retry_attempts` times on model errors; a missing quota or a disabled background tier is not retried.
+# the calendar day that just ended (`lived`), never at the hours-old new date. The plan step is tried `[cloud] plan_retry_waits_s` + 1 times on model errors, waiting between tries when the provider is overloaded or silent; a missing quota or a disabled background tier is not retried.
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ import storage
 from config import load_config
 from extractor.worker import run_extractor_once
 from llm.approved import ApprovalRequired, Grant, QuotaExceeded, approved
+from llm.errors import LLMRateLimited, LLMServerError, LLMTimeout, LLMUnavailable
 from llm.background import background_client
 from patterns.engine import run_patterns_once
 from practiced.planrun import plan_day, run_plan_once
@@ -42,6 +44,8 @@ STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "di
 ONCE = {"extract", "plan", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
 LOOKS_BACK = {"extract", "review"}        # these work on (and are recorded under) yesterday's calendar date
 NOT_RETRIED = (QuotaExceeded, ApprovalRequired)
+WAIT_ON = (LLMServerError, LLMTimeout, LLMUnavailable, LLMRateLimited)    # the provider is busy or silent: waiting can help
+SLEEP = asyncio.sleep                                                     # tests replace it so they do not really wait
 
 Hook = Callable[[datetime], Awaitable[dict[str, Any] | None]]
 
@@ -130,12 +134,12 @@ async def run_nightly(
     async def step_plan() -> dict:
         # The day's plan, from the practiced history, patterns and the person's answers; checked, re-asked on violations.
         with approved(Grant("background", operation="plan")):
-            return await run_plan_once(pool, client or background_client(pool), now)
+            return await run_plan_once(pool, client or background_client(pool, planner=True), now)
 
     async def step_replan() -> dict:
         # The phone's request: the newest pending re-plan or undo. Model errors are retried inside, so the request is answered once.
         with approved(Grant("background", operation="plan")):
-            return await process_pending(pool, client or background_client(pool), now, attempts=cfg.cloud.retry_attempts)
+            return await process_pending(pool, client or background_client(pool, planner=True), now, attempts=cfg.cloud.retry_attempts)
 
     async def step_hook(hook: Hook | None) -> dict:
         return {"skipped": "not configured"} if hook is None else (await hook(now) or {})
@@ -153,7 +157,8 @@ async def run_nightly(
             result.steps[step] = "skipped: already done"
             continue
 
-        attempts = cfg.cloud.retry_attempts if step == "plan" else 1
+        waits = cfg.cloud.plan_retry_waits_s if step == "plan" else []
+        attempts = len(waits) + 1
         for attempt in range(1, attempts + 1):
             try:
                 detail = await actions[step]()
@@ -164,6 +169,9 @@ async def run_nightly(
                 result.steps[step] = f"failed: {message}"
                 if isinstance(exc, NOT_RETRIED):
                     break
+                if isinstance(exc, WAIT_ON) and attempt < attempts:
+                    log.info("%s: the model is overloaded or silent, waiting %ds", step, waits[attempt - 1])
+                    await SLEEP(waits[attempt - 1])
                 continue
             skipped = detail.get("skipped")
             await record(step, day, True, attempt=attempt, detail=detail)

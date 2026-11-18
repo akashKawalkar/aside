@@ -225,7 +225,8 @@ async def run_plan_once(pool, client, now: datetime) -> dict[str, Any]:
         return {"skipped": skip, "day": day.isoformat()}
     inp, summary = await gather(pool, now, client)
     out, done, reasked = await ask(client, inp)
-    entries = [DraftEntry(title=b["title"], start_at=b["start"], end_at=b["end"], reason=b["why"], state=PENDING, task_id=b["task_id"]).to_json()
+    entries = [DraftEntry(title=b["title"], start_at=b["start"], end_at=b["end"], reason=b["why"], state=PENDING, task_id=b["task_id"],
+                        kind=b["kind"], mode=b["mode"]).to_json()
                for b in to_blocks(out, inp)]
     reasoning = {k: out[k] for k in ("anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist", "code_repairs") if k in out}
     draft = await storage.insert_draft(

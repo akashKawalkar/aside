@@ -117,8 +117,17 @@ def run(pool, fake, now=NOW):
     return run_nightly(pool, kind="replan", now=now, client=background_client(pool, inner=fake))
 
 
+async def block_type(pool, title):
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT plan_kind, plan_mode FROM schedule WHERE title = %s AND deleted_at IS NULL", (title,))
+            return await cur.fetchone()
+
+
 async def test_the_rest_of_the_day_is_re_planned_and_undo_puts_the_old_plan_back(pool):
     await a_planned_day(pool)
+    async with pool.connection() as conn:
+        await conn.execute("UPDATE schedule SET plan_kind = 'work', plan_mode = 'study' WHERE title = 'zz Evening'")
     rid = await request(pool)
     fake = FakeClient([reply()], profile=PROFILE)
     result = await run(pool, fake)
@@ -131,6 +140,7 @@ async def test_the_rest_of_the_day_is_re_planned_and_undo_puts_the_old_plan_back
     assert "zz Evening" not in rows and rows["zz Work"]["end_at"] == at(14, 30)        # removed, and cut short at 14:30
     assert rows["zz Morning"]["end_at"] == at(11) and rows["zz Dentist"]["start_at"] == at(16) and "zz Late call" in rows
     assert rows["zz Admin"]["start_at"] == at(14, 30) and rows["zz Dinner"]["origin"] == "generated"
+    assert await block_type(pool, "zz Admin") == ("work", "build") and await block_type(pool, "zz Dinner") == ("anchor", "rest")
     st, err, res = await status(pool, rid)
     assert st == "done" and err is None and len(res["added"]) == 9 and res["removed"][0]["title"] == "zz Evening"
 
@@ -140,6 +150,7 @@ async def test_the_rest_of_the_day_is_re_planned_and_undo_puts_the_old_plan_back
     rows = await day_rows(pool)
     assert "zz Admin" not in rows and "zz Dinner" not in rows
     assert rows["zz Evening"]["start_at"] == at(18) and rows["zz Work"]["end_at"] == at(15)
+    assert await block_type(pool, "zz Evening") == ("work", "study")               # the undo gives the block its type back
     assert (await status(pool, rid))[0] == "undone" and (await status(pool, undo_id))[0] == "done"
 
 

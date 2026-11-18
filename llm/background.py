@@ -16,9 +16,12 @@ log = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 
 
-def background_client(pool, *, inner: LLMClient | None = None, fallback_inner: LLMClient | None = None):
-    """`inner` / `fallback_inner` substitute already-built clients (tests pass FakeClients); they are still gated."""
-    cfg = load_config().llm
+def background_client(pool, *, inner: LLMClient | None = None, fallback_inner: LLMClient | None = None, planner: bool = False):
+    """`inner` / `fallback_inner` substitute already-built clients (tests pass FakeClients); they are still gated.
+    `planner=True` is the client for planning calls: its fallback is `[planner] fallback_model` (none by default, because the
+    cheap fallback model cannot make a valid plan), and a fallback on another provider has its own daily allowance."""
+    full = load_config()
+    cfg = full.llm
 
     async def save_span(row):
         try:
@@ -26,15 +29,22 @@ def background_client(pool, *, inner: LLMClient | None = None, fallback_inner: L
         except Exception:
             log.warning("Could not persist LLM trace to database")
 
+    fallback_name = full.planner.fallback_model if planner else cfg.fallback_model
     fallback = None
-    if inner is None and cfg.fallback_model:
+    if inner is None and fallback_name:
         try:
-            fallback = load_profile(cfg.fallback_model)
+            fallback = load_profile(fallback_name)
         except ValueError:
-            log.warning("fallback model %r has no profile; running without a fallback", cfg.fallback_model)
+            log.warning("fallback model %r has no profile; running without a fallback", fallback_name)
+
+    extra = {}
+    if fallback is not None and fallback.provider != load_profile().provider:
+        provider = fallback.provider           # another company: its own count and cap, not Gemini's
+        extra = dict(fallback_count_today=lambda: count_llm_traces_since(pool, provider_day_start(datetime.now(IST)), provider),
+                     fallback_daily_call_cap=full.planner.fallback_daily_cap)
 
     return create_client(
         count_today=lambda: count_llm_traces_since(pool, provider_day_start(datetime.now(IST))),
         daily_call_cap=cfg.daily_call_cap, background_enabled=cfg.background_enabled, save_span=save_span,
-        timeout=cfg.attempt_timeout, fallback=fallback, inner=inner, fallback_inner=fallback_inner,
+        timeout=cfg.attempt_timeout, fallback=fallback, inner=inner, fallback_inner=fallback_inner, **extra,
     )

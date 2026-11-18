@@ -55,6 +55,7 @@ fallback_model = "gemini-3.1-flash-lite"   # tried once if the chosen model is o
 dial = 0.3
 deep_work_target_slots = 12   # 6 hours of deep work in an ideal day; lower this if the data shows it is unrealistic
 ideal_block_slots = 3         # longest comfortable screen run in the ideal day (90 min)
+fallback_model = ""           # the planner has no fallback model: flash-lite could not produce a valid plan; it waits and retries the main model instead
 
 [patterns]
 lookback_days = 90
@@ -67,7 +68,8 @@ low_intentional_seconds = 1800
 
 [cloud]
 nightly_in_action = false   # the Action sets AGENT_NIGHTLY_IN_ACTION=1 itself; set true here once it owns the nightly job
-retry_attempts = 2
+retry_attempts = 2            # a phone re-plan: the person is waiting, so no long waits
+plan_retry_waits_s = [180, 480]   # the night's plan: wait 3 min, then 8 min, between attempts when the model is overloaded or silent
 laptop_sync = true            # the server syncs Google Calendar/Tasks at start-up, every few minutes, and after edits
 laptop_sync_minutes = 5
 

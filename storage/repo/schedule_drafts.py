@@ -130,6 +130,12 @@ async def accept_entries(pool, draft_id: int, indexes: list[int]) -> dict[str, A
                             await cur.execute("UPDATE schedule SET why = %s WHERE id = %s", (e.reason, created["id"]))
                     except psycopg.errors.UndefinedColumn:
                         pass
+                if e.kind:
+                    try:
+                        async with conn.transaction():          # the same: no add_block_type migration yet, no type recorded
+                            await cur.execute("UPDATE schedule SET plan_kind = %s, plan_mode = %s WHERE id = %s", (e.kind, e.mode or None, created["id"]))
+                    except psycopg.errors.UndefinedColumn:
+                        pass
                 e.state, e.locked, e.schedule_id = ACCEPTED, True, created["id"]
                 accepted.append(created["id"])
 

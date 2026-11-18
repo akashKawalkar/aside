@@ -1,4 +1,4 @@
-# The nightly brain: pull Calendar/Tasks, sessionize, day record, extract, patterns, digest, plan the day, push Calendar, review.
+# The nightly brain (02:00 IST, then retries at 03:00, 03:30 and 04:30 that only do something if the day still has no plan): pull Calendar/Tasks, sessionize, day record, extract, patterns, digest, plan the day, push Calendar, review.
 # It runs while the person sleeps and plans the day that starts at 05:00.
 # Everything personal lives in the database and in the repository secrets; this repository holds only code.
 name: nightly
@@ -7,6 +7,8 @@ on:
   schedule:
     - cron: "30 20 * * *"   # 02:00 IST: the night run (plans the day that starts at 05:00)
     - cron: "30 21 * * *"   # 03:00 IST: the retry (the same day, a no-op if it is already planned)
+    - cron: "0 22 * * *"    # 03:30 IST: another retry, in case the model was overloaded for the whole first hour
+    - cron: "0 23 * * *"    # 04:30 IST: the last scheduled retry before the day starts at 05:00
   workflow_dispatch:
     inputs:
       kind:
@@ -22,7 +24,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30      # the plan step may wait 3 and 8 minutes between attempts when the model is overloaded
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,5 +44,5 @@ jobs:
           AGENT_BACKGROUND_ENABLED: "1"
           AGENT_NIGHTLY_IN_ACTION: "1"
           TZ: UTC
-          KIND: ${{ github.event.inputs.kind || (github.event.schedule == '30 21 * * *' && 'morning_retry') || 'nightly' }}
+          KIND: ${{ github.event.inputs.kind || (github.event.schedule == '30 20 * * *' && 'nightly') || 'morning_retry' }}
         run: python -m cloud "$KIND"

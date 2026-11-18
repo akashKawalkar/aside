@@ -59,7 +59,7 @@ class Planner(BaseModel):
     dial: float = Field(default=0.3, ge=0.0, le=1.0)   # 0 = plan from what the person actually did, 1 = ideal day
     deep_work_target_slots: int = Field(default=12, gt=0)   # target deep-work slots per day in an ideal day (12 = 6 h)
     ideal_block_slots: int = Field(default=3, gt=0, le=6)   # longest comfortable screen run in the ideal day
-    fallback_model: str = ""          # the planner's own fallback when the main model is overloaded; "" = [llm] fallback_model
+    fallback_model: str = ""          # the planner's own fallback when the main model is overloaded; "" = none (flash-lite cannot plan)
     fallback_daily_cap: int = Field(default=15, ge=0)   # calls a day for a fallback on another provider (counted per provider)
 
 
@@ -82,7 +82,8 @@ class Privacy(BaseModel):
 class Cloud(BaseModel):
     """The nightly job runs in a scheduled GitHub Action instead of on the laptop (docs: the cloud plan)."""
     nightly_in_action: bool = False     # true: the laptop server skips the nightly workers (review, daily record, patterns, extractor)
-    retry_attempts: int = Field(default=2, ge=1, le=3)   # model attempts for the schedule step inside one run (1 retry = 2)
+    retry_attempts: int = Field(default=2, ge=1, le=3)   # model attempts for a phone re-plan (1 retry = 2)
+    plan_retry_waits_s: list[int] = [180, 480]           # the night's plan: after a provider failure wait this long, then try again (attempts = waits + 1)
     laptop_sync: bool = True                             # the laptop server syncs Google Calendar/Tasks while it is on (needs Google credentials)
     laptop_sync_minutes: float = Field(default=5.0, gt=0)
 

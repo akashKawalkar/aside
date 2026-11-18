@@ -71,6 +71,9 @@ async def _clean(pool):
             await cur.execute("DELETE FROM llm_trace WHERE operation IN ('schedule', 'plan') AND model = 'fake-gen'")
 
 
+slept: list[float] = []
+
+
 @pytest.fixture
 async def pool(monkeypatch):
     p = storage.make_pool()
@@ -79,6 +82,11 @@ async def pool(monkeypatch):
     except Exception:
         pytest.skip("database not reachable")
     monkeypatch.setenv("AGENT_BACKGROUND_ENABLED", "1")
+    slept.clear()
+
+    async def no_wait(seconds):            # the night waits minutes between attempts; a test must not
+        slept.append(seconds)
+    monkeypatch.setattr("cloud.nightly.SLEEP", no_wait)
     await _clean(p)
     yield p
     await _clean(p)
@@ -140,6 +148,41 @@ async def test_a_rerun_the_same_night_changes_nothing_and_makes_no_second_call(p
     assert len(fake.calls) == 1 and len(await schedule_rows(pool)) == before
 
 
+async def test_an_overloaded_model_is_waited_out_between_attempts(pool, monkeypatch):
+    from llm.errors import LLMServerError
+    from practiced.llmcall import call_json
+
+    quick: list[float] = []
+
+    async def quick_sleep(seconds):                      # the client's own short backoff between its 3 tries
+        quick.append(seconds)
+    monkeypatch.setitem(call_json.__kwdefaults__, "sleep", quick_sleep)
+
+    class Overloaded(Flaky):
+        async def complete(self, *a, **kw):
+            self.attempts += 1
+            if self.attempts <= self.fail:
+                raise LLMServerError("HTTP 503: This model is currently experiencing high demand")
+            return await FakeClient.complete(self, *a, **kw)
+
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    fake = Overloaded([reply(task["id"])], fail=6)       # two whole attempts (3 quick tries each) fail, the third attempt works
+    result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
+    assert result.steps["plan"] == "ok"
+    assert slept == [180, 480]                                         # 3 minutes, then 8 minutes, between the night's attempts
+    logged = await runs(pool)
+    assert [logged[("plan", n)]["ok"] for n in (1, 2, 3)] == [False, False, True]
+
+
+async def test_a_spent_quota_or_a_bad_plan_is_not_waited_for(pool):
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    fake = Flaky([reply(task["id"])], fail=1)                          # a plain LLMError: nothing to wait out
+    await run_nightly(pool, now=NOW, client=gated(pool, fake))
+    assert slept == []
+
+
 async def test_a_model_failure_is_retried_once_and_both_attempts_are_logged(pool):
     await fixed_dentist(pool)
     task = await due_task(pool)
@@ -175,14 +218,14 @@ async def test_an_answer_that_never_passes_fails_the_step_with_no_fallback_plan(
     assert result.steps["review"] == "ok"
 
 
-async def test_two_failures_leave_no_plan_and_a_reason_and_the_run_continues(pool):
+async def test_three_failures_leave_no_plan_and_a_reason_and_the_run_continues(pool):
     fake = Flaky([reply()], fail=9)
     result = await run_nightly(pool, now=NOW, client=gated(pool, fake))
 
     assert result.steps["plan"].startswith("failed") and not result.ok
     assert result.steps["review"] == "ok"                       # the review does not wait for the plan
     assert await schedule_rows(pool) == []
-    assert sorted(k for k in await runs(pool) if k[0] == "plan") == [("plan", 1), ("plan", 2)]
+    assert sorted(k for k in await runs(pool) if k[0] == "plan") == [("plan", 1), ("plan", 2), ("plan", 3)]
 
 
 async def test_a_spent_quota_is_not_retried(pool, monkeypatch):
@@ -286,3 +329,23 @@ async def test_the_night_run_reviews_and_snapshots_the_day_that_just_ended_not_t
             await cur.execute("UPDATE job_run SET finished_at = %s WHERE day >= '2031-01-01' AND kind = 'nightly'", (NOW,))  # the fake clock
     again = await run_nightly(pool, now=NOW + timedelta(hours=1), kind="nightly", client=gated(pool, FakeClient([], profile=PROFILE)))
     assert again.steps["review"] == "skipped: already done" and again.steps["extract"] == "skipped: already done"
+
+
+async def test_the_planner_s_block_type_reaches_the_calendar_row_and_the_phone_rpc(pool):
+    """B+C: the phone asks about phone use only in study/build blocks, so it must be told what each block is."""
+    await fixed_dentist(pool)
+    task = await due_task(pool)
+    await run_nightly(pool, now=NOW, client=gated(pool, FakeClient([reply(task["id"])], profile=PROFILE)))
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT title, kind, mode FROM plan_blocks(%s) WHERE origin = 'generated' ORDER BY start_at", (DAY,))
+            got = await cur.fetchall()
+    kinds = {(b["title"], b["kind"], b["mode"]) for b in EXAMPLE_OUTPUT["plan"]}
+    assert len(got) == len(EXAMPLE_OUTPUT["plan"]) and set(got) <= kinds
+    assert ("Meditation", "anchor", "rest") in got and ("Walk outside", "break", "outdoor") in got
+    assert any(k == "work" and m in ("study", "build") for _, k, m in got)
+    by_hand = await storage.create_schedule_entry(pool, title="zz by hand", start_at=at(20), end_at=at(21))
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT kind, mode FROM plan_blocks(%s) WHERE title = 'zz by hand'", (DAY,))
+            assert await cur.fetchone() == (None, None)                        # unknown: the phone stays quiet

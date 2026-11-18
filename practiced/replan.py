@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -98,7 +99,8 @@ async def _rows(pool, day: date) -> list[dict]:
     lo, hi = day_window(day)
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute("SELECT id, title, start_at, end_at, origin, edited_by_user, task_id, why FROM schedule "
+            await cur.execute("SELECT id, title, start_at, end_at, origin, edited_by_user, task_id, why, "
+                              "to_jsonb(schedule)->>'plan_kind' AS plan_kind, to_jsonb(schedule)->>'plan_mode' AS plan_mode FROM schedule "
                               "WHERE deleted_at IS NULL AND start_at < %s AND end_at > %s ORDER BY start_at", (hi, lo))
             return await cur.fetchall()
 
@@ -112,7 +114,8 @@ def _end_slot(t: datetime, day: date) -> int:
 
 
 def _saved(r: dict) -> dict:
-    return {"title": r["title"], "start_at": r["start_at"].isoformat(), "end_at": r["end_at"].isoformat(), "task_id": r["task_id"], "why": r["why"]}
+    return {"title": r["title"], "start_at": r["start_at"].isoformat(), "end_at": r["end_at"].isoformat(), "task_id": r["task_id"], "why": r["why"],
+            "kind": r["plan_kind"], "mode": r["plan_mode"]}
 
 
 async def replan(pool, client, now: datetime, note: str) -> dict[str, Any]:
@@ -137,7 +140,8 @@ async def replan(pool, client, now: datetime, note: str) -> dict[str, Any]:
                          "title": r["title"]} for r in sorted(trim + remove, key=lambda r: r["start_at"])]
     inp.feedback = note.strip() or NO_NOTE
     out, done, reasked = await ask(client, inp)
-    entries = [DraftEntry(title=b["title"], start_at=b["start"], end_at=b["end"], reason=b["why"], state=PENDING, task_id=b["task_id"]).to_json()
+    entries = [DraftEntry(title=b["title"], start_at=b["start"], end_at=b["end"], reason=b["why"], state=PENDING, task_id=b["task_id"],
+                        kind=b["kind"], mode=b["mode"]).to_json()
                for b in to_blocks(out, inp) if b["start"] >= cut]
 
     # The model's plan passed the checks: only now is anything changed.
@@ -199,6 +203,12 @@ async def undo(pool, target: int | None) -> dict[str, Any]:
         if r.get("why"):
             async with pool.connection() as conn:
                 await conn.execute("UPDATE schedule SET why = %s WHERE id = %s", (r["why"], entry["id"]))
+        if r.get("kind"):
+            try:
+                async with pool.connection() as conn:
+                    await conn.execute("UPDATE schedule SET plan_kind = %s, plan_mode = %s WHERE id = %s", (r["kind"], r.get("mode"), entry["id"]))
+            except psycopg.errors.UndefinedColumn:
+                pass
         restored += 1
 
     async with pool.connection() as conn:
