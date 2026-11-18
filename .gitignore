@@ -132,3 +132,6 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# prompt experiments hold real tasks and history: kept on this machine only
+docs/prompt_experiments/
