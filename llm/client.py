@@ -61,6 +61,8 @@ class ModelProfile:
     chars_per_token: float = 4.0
     safety_margin: float = 1.15
     reasoning_effort: str | None = None          # sent as `reasoning_effort` when set; which values a model accepts differs per model
+    base_url: str = ""                           # OpenAI-compatible endpoint for this model; "" = OPENAI_BASE_URL (or OpenAI)
+    api_key_env: str = ""                        # the environment variable holding this model's key; "" = OPENAI_API_KEY
 
     def cost(self, usage: Usage) -> float:
         """Thinking tokens are billed as output."""

@@ -22,6 +22,7 @@ import storage  # noqa: E402
 from config import load_config  # noqa: E402
 from llm.approved import Grant, approved  # noqa: E402
 from llm.client import Message  # noqa: E402
+from llm.client import load_profile  # noqa: E402
 from llm.factory import create_client, load_dotenv  # noqa: E402,F401  (importing the factory loads .env)
 from llm.quota import provider_day_start  # noqa: E402
 from practiced.llmcall import BadReply, call_json  # noqa: E402
@@ -31,7 +32,7 @@ from practiced.planrun import MAX_TOKENS, RETRIES, TEMPERATURE, gather  # noqa: 
 from storage.repo.llm_trace import count_llm_traces_since, insert_llm_trace  # noqa: E402
 
 OUT = ROOT / "docs" / "prompt_experiments"
-SPARE = 3      # calls left for the person's own use
+SPARE = 15     # calls left for the person's chat and the nightly job (a bad night uses about 13): replays must never starve it
 
 
 async def main(a) -> None:
@@ -43,15 +44,18 @@ async def main(a) -> None:
         (OUT / f"v{PROMPT_VERSION}_system.txt").write_text(messages[0].content, encoding="utf-8")
         (OUT / f"v{PROMPT_VERSION}_user.txt").write_text(messages[1].content, encoding="utf-8")
 
-        cap = load_config().llm.daily_call_cap
-        count = lambda: count_llm_traces_since(pool, provider_day_start(datetime.now(IST)))  # noqa: E731
+        # Each provider has its own allowance: Gemini's [llm] daily_call_cap, any other the planner's fallback_daily_cap.
+        provider = load_profile(a.model).provider
+        cfg = load_config()
+        cap = cfg.llm.daily_call_cap if provider == "gemini" else cfg.planner.fallback_daily_cap
+        count = lambda: count_llm_traces_since(pool, provider_day_start(datetime.now(IST)), provider)  # noqa: E731
         if await count() + RETRIES + 1 > cap - SPARE:
             sys.exit(f"Not enough calls left today ({await count()} of {cap} used; {SPARE} kept spare).")
 
         async def save_span(row):
             await insert_llm_trace(pool, row)
         client = create_client(a.model, count_today=count, daily_call_cap=cap, background_enabled=True, save_span=save_span,
-                               timeout=load_config().llm.attempt_timeout)
+                               timeout=a.timeout or load_config().llm.attempt_timeout)
 
         attempts = []
         with approved(Grant("background", operation="plan_replay")):
@@ -87,6 +91,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--at", required=True, help="the run time to rebuild, ISO with offset")
     p.add_argument("--model", required=True, help="model profile name, e.g. gemini-3.6-flash or gemini-3.1-flash-lite")
+    p.add_argument("--timeout", type=float, default=0, help="seconds one attempt waits (default: [llm] attempt_timeout)")
     p.add_argument("--label", default="", help="result file label (default: the model name)")
     if sys.platform == "win32":     # psycopg async needs the selector loop on Windows
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

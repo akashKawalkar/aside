@@ -115,7 +115,7 @@ async def test_compile_call_trace_replay_under_two_recipes():
         return [{"id": 1, "title": "Gym", "start_at": NOW + timedelta(hours=2), "end_at": NOW + timedelta(hours=3)}]
 
     async def fetch_tasks(*, status):
-        return [{"id": 5, "text": "Pay rent", "due_at": NOW + timedelta(days=1)}]
+        return [{"id": 5, "text": "Pay rent", "due_at": datetime.now(timezone.utc) + timedelta(days=1)}]   # real clock: TasksSource drops long-overdue tasks by it
 
     sources = {
         "current_session": CurrentSessionSource(),

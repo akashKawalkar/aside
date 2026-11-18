@@ -32,9 +32,9 @@ def _raw_client(profile: ModelProfile | str | None = None, *, api_key: str | Non
         base_url = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
         return OpenAICompatibleClient(prof, base_url=base_url, api_key=clean_key, timeout=timeout)
 
-    # General OpenAI-compatible fallback
-    key = api_key or os.environ.get("OPENAI_API_KEY", "")
-    base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    # Any other OpenAI-compatible provider; a profile may name its own endpoint and key variable (e.g. SambaNova).
+    key = api_key or os.environ.get(prof.api_key_env or "OPENAI_API_KEY", "")
+    base_url = prof.base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
     return OpenAICompatibleClient(prof, base_url=base_url, api_key=key.strip().strip("'\""), timeout=timeout)
 
 
@@ -50,15 +50,18 @@ def create_client(
     timeout: float = 60.0,
     fallback: ModelProfile | str | None = None,
     fallback_inner: LLMClient | None = None,
+    fallback_count_today: CountToday | None = None,
+    fallback_daily_call_cap: int | None = None,
 ) -> ApprovedClient | FallbackClient:
     """A client that runs only inside `llm.approved.approved(...)`, only under today's cap, and always traces.
     Provider by profile: fake -> FakeClient, gemini -> Google's OpenAI-compatible endpoint, else OpenAI-compatible.
     `timeout` is how long ONE attempt waits for a reply. With `fallback`, a second, different model is tried when the first
     is overloaded or silent (see llm/resilient.py); each attempt is gated and traced on its own.
     `inner` / `fallback_inner` substitute already-built clients (tests pass FakeClients) and are still gated; with `inner`
-    given and no `fallback_inner`, no fallback is built, so a test can never reach the network by accident."""
-    def gated(client: LLMClient) -> ApprovedClient:
-        return ApprovedClient(client, count_today=count_today, daily_call_cap=daily_call_cap,
+    given and no `fallback_inner`, no fallback is built, so a test can never reach the network by accident.
+    `fallback_count_today` / `fallback_daily_call_cap` give a fallback on another provider its own allowance."""
+    def gated(client: LLMClient, count: CountToday = count_today, cap: int = daily_call_cap) -> ApprovedClient:
+        return ApprovedClient(client, count_today=count, daily_call_cap=cap,
                               background_enabled=background_enabled, save_span=save_span)
 
     primary = gated(inner if inner is not None else _raw_client(profile, api_key=api_key, timeout=timeout))
@@ -66,9 +69,12 @@ def create_client(
     if inner is not None:
         backup = fallback_inner
     elif fallback is not None:
-        backup = _raw_client(fallback, api_key=api_key, timeout=timeout)
+        fb = load_profile(fallback) if isinstance(fallback, str) else fallback
+        # an explicit `api_key` is a Gemini key; a fallback on another provider reads its own (profile.api_key_env)
+        backup = _raw_client(fb, api_key=api_key if fb.provider == "gemini" else None, timeout=timeout)
     else:
         backup = None
     if backup is None or backup.profile.name == primary.profile.name:
         return primary
-    return FallbackClient(primary, gated(backup))
+    return FallbackClient(primary, gated(backup, fallback_count_today or count_today,
+                                         daily_call_cap if fallback_daily_call_cap is None else fallback_daily_call_cap))

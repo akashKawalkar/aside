@@ -32,11 +32,15 @@ async def insert_llm_trace(pool, span: dict[str, Any]) -> int:
             return (await cur.fetchone())[0]
 
 
-async def count_llm_traces_since(pool, since) -> int:
-    """Model calls made at or after `since`, failed ones included (a failure still uses the provider's allowance)."""
+async def count_llm_traces_since(pool, since, provider: str | None = None) -> int:
+    """Model calls made at or after `since`, failed ones included (a failure still uses the provider's allowance).
+    With `provider`, only that provider's calls: each provider has its own daily allowance."""
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT count(*) FROM llm_trace WHERE ts >= %s", (since,))
+            if provider is None:
+                await cur.execute("SELECT count(*) FROM llm_trace WHERE ts >= %s", (since,))
+            else:
+                await cur.execute("SELECT count(*) FROM llm_trace WHERE ts >= %s AND provider = %s", (since, provider))
             return (await cur.fetchone())[0]
 
 

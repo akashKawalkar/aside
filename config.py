@@ -59,6 +59,8 @@ class Planner(BaseModel):
     dial: float = Field(default=0.3, ge=0.0, le=1.0)   # 0 = plan from what the person actually did, 1 = ideal day
     deep_work_target_slots: int = Field(default=12, gt=0)   # target deep-work slots per day in an ideal day (12 = 6 h)
     ideal_block_slots: int = Field(default=3, gt=0, le=6)   # longest comfortable screen run in the ideal day
+    fallback_model: str = ""          # the planner's own fallback when the main model is overloaded; "" = [llm] fallback_model
+    fallback_daily_cap: int = Field(default=15, ge=0)   # calls a day for a fallback on another provider (counted per provider)
 
 
 class Patterns(BaseModel):

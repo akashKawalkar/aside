@@ -75,3 +75,55 @@ supports_json = true
 chars_per_token = 3.5
 safety_margin = 1.15
 reasoning_effort = "minimal"
+
+
+# Candidates for the planner's fallback (tested 2026-11-18 with scripts/replay_plan.py).
+[models."gemini-3.5-flash"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.75
+output_cost = 3.75
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+reasoning_effort = "low"
+
+[models."gemma-4-31b-it"]
+provider = "gemini"
+window = 262144
+input_cost = 0.0
+output_cost = 0.0
+supports_tools = false
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+
+# Rejects reasoning_effort "minimal" with HTTP 400 (2026-10-07), so "low".
+[models."gemini-3.7-flash"]
+provider = "gemini"
+window = 1048576
+input_cost = 0.75
+output_cost = 3.75
+supports_tools = true
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
+reasoning_effort = "low"
+
+# OpenRouter free endpoint (20 requests/min, 50/day without purchased credits). NVIDIA-hosted. A reasoning model: it needs
+# max_tokens ~14000 and ~5 minutes per planner call (tested 2026-11-18: valid plan in 258 s; at 9000 tokens it is cut off).
+# nemotron-3.5-super-vl:free never finished thinking even at 20000 tokens. Free models come and go (gpt-oss-120b:free was
+# removed): check openrouter.ai/api/v1/models before relying on one.
+
+[models."nvidia/nemotron-3-ultra-550b-a55b:free"]
+provider = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+window = 1000000
+input_cost = 0.0
+output_cost = 0.0
+supports_tools = false
+supports_json = true
+chars_per_token = 3.5
+safety_margin = 1.15
