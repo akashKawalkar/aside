@@ -2,7 +2,7 @@
 # Runs from a scheduled GitHub Action (python -m cloud) against the shared database; every step is a plain function that
 # already exists for the laptop, so the Action and the laptop cannot drift apart.
 #
-#   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> extract -> patterns -> digest -> plan -> calendar_push -> review
+#   nightly / manual  calendar_pull -> sessionize -> daily -> drop_stale -> slipping -> extract -> patterns -> digest -> plan -> calendar_push -> review
 #   morning_retry     calendar_pull -> digest -> plan -> calendar_push        (the same day again; a no-op if it is already planned)
 #   replan            calendar_pull -> replan -> calendar_push                (started by the phone: re-plan the rest of today, or undo)
 #
@@ -26,6 +26,7 @@ from llm.background import background_client
 from patterns.engine import run_patterns_once
 from practiced.planrun import plan_day, run_plan_once
 from practiced.replan import logical_day, process_pending
+from practiced.slipping import run_slipping_once
 from practiced.store import run_digest_once
 from review.daily import run_daily_once
 from review.store import DbBackend, ReviewStore
@@ -35,7 +36,7 @@ from sessions.job import sessionize_recent
 log = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 
-FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "extract", "patterns", "digest", "plan", "calendar_push", "review")
+FULL = ("calendar_pull", "sessionize", "daily", "drop_stale", "slipping", "extract", "patterns", "digest", "plan", "calendar_push", "review")
 STEPS = {"nightly": FULL, "manual": FULL, "morning_retry": ("calendar_pull", "digest", "plan", "calendar_push"),
          "replan": ("calendar_pull", "replan", "calendar_push")}
 ONCE = {"extract", "plan", "review"}      # once one succeeded for its day, a rerun skips it (no second model call)
@@ -101,6 +102,10 @@ async def run_nightly(
     async def step_drop_stale() -> dict:
         return {"dropped": [t["id"] for t in await storage.drop_stale_tasks(pool, now=now)]}
 
+    async def step_slipping() -> dict:
+        # Tasks planned (or pushed) and not done three days running: one question each for the morning. Plain code, no model.
+        return await run_slipping_once(pool, lived, today, now)
+
     async def step_extract() -> dict:
         if not cfg.llm.background_enabled:
             return {"skipped": "background model calls are disabled"}
@@ -137,7 +142,7 @@ async def run_nightly(
 
     actions: dict[str, Callable[[], Awaitable[dict]]] = {
         "calendar_pull": lambda: step_hook(hooks.pull), "sessionize": step_sessionize, "daily": step_daily,
-        "drop_stale": step_drop_stale, "extract": step_extract, "patterns": step_patterns, "digest": step_digest, "plan": step_plan,
+        "drop_stale": step_drop_stale, "slipping": step_slipping, "extract": step_extract, "patterns": step_patterns, "digest": step_digest, "plan": step_plan,
         "calendar_push": lambda: step_hook(hooks.push), "review": step_review, "replan": step_replan,
     }
 

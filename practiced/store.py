@@ -29,13 +29,14 @@ async def load_plans(pool, day: date) -> list[Plan]:
 async def load_tasks(pool, day: date) -> tuple[list[dict], list[dict]]:
     """(done that day, still open and slipping)."""
     lo, hi = day_window(day)
+    someday = await storage.someday_clause(pool)
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute("SELECT text, completed_at FROM tasks WHERE completed_at >= %s AND completed_at < %s ORDER BY completed_at", (lo, hi))
             done = [{"text": r["text"], "at": r["completed_at"].astimezone(IST).strftime("%H:%M")} for r in await cur.fetchall()]
             await cur.execute(
-                "SELECT text, slip_count, due_at FROM tasks WHERE completed_at IS NULL AND dropped_at IS NULL AND slip_count > 0 "
-                "ORDER BY slip_count DESC, id")
+                "SELECT text, slip_count, due_at FROM tasks WHERE completed_at IS NULL AND dropped_at IS NULL AND slip_count > 0" + someday +
+                " ORDER BY slip_count DESC, id")
             slipping = [{"text": r["text"], "slip_count": r["slip_count"],
                          "due": r["due_at"].astimezone(IST).date().isoformat() if r["due_at"] else None} for r in await cur.fetchall()]
     return done, slipping

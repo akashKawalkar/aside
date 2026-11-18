@@ -21,6 +21,7 @@ from storage.repo.tasks import (
     expire_tasks,
     drop_stale_tasks,
     list_pending_with_slips,
+    someday_clause,
     list_task_log,
     list_task_due_changes,
 )
@@ -123,6 +124,7 @@ __all__ = [
     "expire_tasks",
     "drop_stale_tasks",
     "list_pending_with_slips",
+    "someday_clause",
     "list_task_log",
     "list_task_due_changes",
     "fetch_events_range",

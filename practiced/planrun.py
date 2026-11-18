@@ -163,10 +163,11 @@ async def gather(pool, now: datetime, client=None, *, day: date | None = None) -
 
     prefs = [(e["section"], e["text"]) for e in await storage.list_persistent_entries(pool, include_retired=False)]
     tasks = []
+    someday = await storage.someday_clause(pool)          # tasks parked as "someday" are not planned
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute("SELECT id, text, due_at, slip_count FROM tasks WHERE completed_at IS NULL AND dropped_at IS NULL "
-                              "ORDER BY due_at NULLS LAST, slip_count DESC, id LIMIT 12")
+            await cur.execute("SELECT id, text, due_at, slip_count FROM tasks WHERE completed_at IS NULL AND dropped_at IS NULL" + someday +
+                              " ORDER BY due_at NULLS LAST, slip_count DESC, id LIMIT 12")
             tasks = [{"id": r["id"], "text": r["text"], "due": r["due_at"].astimezone(IST).date().isoformat() if r["due_at"] else None,
                       "slip_count": r["slip_count"], "source": "tasks"} for r in await cur.fetchall()]
     text_night, wake_slot = await last_night(pool, now, day, patterns, latest)

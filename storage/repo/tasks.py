@@ -383,13 +383,23 @@ async def expire_tasks(
     return expired
 
 
+async def someday_clause(pool) -> str:
+    """" AND someday_at IS NULL" (tasks parked as "someday" are not planned, asked about or dropped), or "" on a database that
+    has not had the add_task_question migration yet, so the nightly job keeps working before and after it is applied."""
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'someday_at'")
+            return " AND someday_at IS NULL" if await cur.fetchone() else ""
+
+
 async def list_pending_with_slips(pool) -> list[dict[str, Any]]:
     """Pending tasks, each with how many times its due date was postponed (the schedule generator's view)."""
+    someday = await someday_clause(pool)
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """SELECT id, text, due_at, status, created_at, completed_at, slip_count
-                   FROM tasks WHERE status = 'pending' ORDER BY due_at IS NULL, due_at, created_at"""
+                f"""SELECT id, text, due_at, status, created_at, completed_at, slip_count
+                   FROM tasks WHERE status = 'pending'{someday} ORDER BY due_at IS NULL, due_at, created_at"""
             )
             rows = await cur.fetchall()
     return [{**_row_to_dict(r), "slip_count": r[6]} for r in rows]
@@ -401,11 +411,12 @@ async def drop_stale_tasks(pool, *, now: datetime | None = None) -> list[dict[st
 
     now = now or datetime.now().astimezone()
     dropped = []
+    someday = await someday_clause(pool)
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """SELECT id, text, due_at, status, created_at, completed_at, slip_count
-                   FROM tasks WHERE status = 'pending' FOR UPDATE"""
+                f"""SELECT id, text, due_at, status, created_at, completed_at, slip_count
+                   FROM tasks WHERE status = 'pending'{someday} FOR UPDATE"""
             )
             for row in await cur.fetchall():
                 reason = stale_reason(row[2], row[6], now)
