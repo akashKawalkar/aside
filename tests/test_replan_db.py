@@ -47,7 +47,7 @@ def reply():
     ]
     return json.dumps({
         "feedback_constraints": ["skip the evening session"],
-        "anchors": {"wake_slot": 19, "sleep_slot": 36, "free_slots_left": 13},
+        "anchors": {"wake_slot": 19, "sleep_slot": 36},
         "demand": [{"item": "work", "slots": 9}, {"item": "breaks", "slots": 4}],
         "demand_vs_free": "13 against 13",
         "windows": [{"slots": "24-27", "clock": slot_range_clock(24, 27), "rating": "strong", "evidence": "test"}],

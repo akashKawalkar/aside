@@ -77,12 +77,56 @@ def test_a_missing_meditation_workout_or_outdoor_block_is_caught():
     assert any("outdoor" in x for x in bad(indoor))
 
 
-def test_meditation_too_soon_after_a_meal_is_caught():
+def test_meditation_after_breakfast_is_caught():
     def move(o):
-        o["plan"][0]["start_slot"] = 4
         o["plan"].insert(1, {"start_slot": 5, "slots": 1, "kind": "anchor", "title": "Breakfast", "mode": "rest", "why": "x"})
         o["plan"].pop(2)         # the walk
-    assert any("4 hours" in x for x in bad(move))
+    assert any("morning before the first meal" in x for x in bad(move))
+
+
+def _evening(o, med_start, dinner_start=30):
+    """Meditation moved from the morning (slots 6-7) to the evening; the two freed morning slots become a walk."""
+    for b in o["plan"]:
+        if b["title"] == "Meditation":
+            b["start_slot"] = med_start
+        elif b["title"] == "Dinner":
+            b["start_slot"] = dinner_start
+    o["plan"][:] = [b for b in o["plan"] if not (med_start <= b["start_slot"] < med_start + 2 and b["title"] != "Meditation")]
+
+
+def test_evening_meditation_before_dinner_is_fine_but_not_right_after_lunch():
+    from practiced.plancheck import _check_meditation
+    lunch = {"start_slot": 16, "slots": 2, "title": "Lunch"}
+    dinner = {"start_slot": 30, "slots": 2, "title": "Dinner"}
+    assert _check_meditation({"start_slot": 26, "slots": 2}, [lunch, dinner]) == []           # 18:00, 4 hours after lunch
+    assert any("4 hours" in x for x in _check_meditation({"start_slot": 20, "slots": 2}, [lunch, dinner]))
+    assert any("morning before the first meal" in x for x in _check_meditation({"start_slot": 33, "slots": 2}, [lunch, dinner]))
+    late = {"start_slot": 34, "slots": 2, "title": "Dinner"}
+    assert any("must start by slot 33" in x for x in _check_meditation({"start_slot": 30, "slots": 2}, [lunch, late]))
+    assert _check_meditation({"start_slot": 30, "slots": 2}, [lunch, {**late, "start_slot": 33}]) == []   # dinner pushed to 21:30
+
+
+def test_trivial_mistakes_are_repaired_not_rejected():
+    from practiced.plancheck import repair
+    out = copy.deepcopy(EXAMPLE_OUTPUT)
+    out["plan"][1].update(title="Rest", mode="rest", minutes=45)        # the 05:30 walk: off menu, too long
+    out["plan"][3]["slots"] = 2.0                                        # passport form
+    out["windows"][0]["clock"] = "10-13"
+    notes = repair(out, inp())
+    assert out["plan"][1]["title"] == "Short meditation" and out["plan"][1]["minutes"] == 30
+    assert out["plan"][3]["slots"] == 2 and out["windows"][0]["clock"] == "10:00-13:00" and len(notes) == 4
+    out["plan"][1]["mode"] = "outdoor"; out["plan"][1]["title"] = "Walk outside"   # keep the outdoor block for check()
+    assert check(out, inp()) == []
+
+
+def test_an_overlong_break_gives_its_extra_slots_to_the_work_before_it():
+    from practiced.plancheck import repair
+    out = copy.deepcopy(EXAMPLE_OUTPUT)
+    # passport form 10-11, chores 12, study 13-15: make chores 12-14 and study 15 only
+    form, chores, study = out["plan"][3], out["plan"][4], out["plan"][5]
+    chores["slots"], study["start_slot"], study["slots"] = 3, 15, 1
+    assert any("cut to 2 slots" in n for n in repair(out, inp()))
+    assert (form["slots"], chores["start_slot"], chores["slots"]) == (3, 13, 2)
 
 
 def test_tasks_due_must_be_placed_once():
@@ -116,9 +160,11 @@ def test_dial_numbers_pull_the_real_toward_the_ideal():
     assert dial_numbers(176, 36, 0.0) == (6, 1) and dial_numbers(176, 36, 1.0) == (12, 3)
 
 
-def test_free_slots_and_demand_must_add_up():
-    assert any("free_slots_left must be 23" in x for x in bad(lambda o: o["anchors"].update(free_slots_left=24)))
-    assert any("add up to 15" in x for x in bad(lambda o: o["demand"].pop()))
+def test_a_wrong_demand_total_is_noted_not_rejected():
+    from practiced.plancheck import repair
+    out = copy.deepcopy(EXAMPLE_OUTPUT)
+    out["demand"].pop()
+    assert any("not the 23 free slots" in n for n in repair(out, inp())) and check(out, inp()) == []
 
 
 def test_window_clock_times_must_match_the_slots():

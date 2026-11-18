@@ -11,7 +11,7 @@ from datetime import date
 
 from llm.client import Message
 
-PROMPT_VERSION = 5
+PROMPT_VERSION = 6
 SLOTS = 48                                     # half-hour slots; the day runs 05:00 to 05:00, so slot 0 = 05:00 and slot 38 = 00:00
 DAY_START_MIN = 5 * 60                         # the logical day begins at 05:00 IST
 MODES = ("study", "build", "physical", "outdoor", "rest", "voice")
@@ -19,7 +19,8 @@ SCREEN_MODES = ("study", "build")
 KINDS = ("anchor", "work", "break")
 DEPTHS = ("deep", "shallow")
 MAX_SCREEN_RUN = 3                             # slots in a row of screen work before an off-screen break
-MEDITATION_GAP_SLOTS = 8                       # 4 hours after the last meal
+MEDITATION_GAP_SLOTS = 8                       # evening meditation: 4 hours after lunch
+LATEST_DINNER_SLOT = 33                        # dinner may move later for meditation, but starts by 21:30
 BREAK_MENU = ("sing songs", "short meditation", "short workout", "walk outside", "household chores", "speaking exercises")
 DEFAULT_DIAL = 0.3
 DEEP_WORK_TARGET_SLOTS = 12                    # the ideal day's deep work: 6 hours. A placeholder until the person sets one
@@ -95,8 +96,7 @@ EXAMPLE_OUTPUT = {'anchors': {'wake_slot': 4,
              'meals': [{'name': 'Lunch', 'slot': 16, 'slots': 2, 'reason': 'default 13:00-14:00'},
                        {'name': 'Dinner', 'slot': 30, 'slots': 2, 'reason': 'default 20:00-21:00'}],
              'workout': {'slot': 4, 'slots': 1, 'reason': 'every morning right after waking'},
-             'meditation': {'slot': 6, 'slots': 2, 'reason': "08:00 is far more than 4 hours after last night's dinner"},
-             'free_slots_left': 23},
+             'meditation': {'slot': 6, 'slots': 2, 'reason': "morning, before the first meal"}},
  'demand': [{'item': 'Renew passport form', 'slots': 2, 'why': 'due tomorrow, slipped 3 times', 'source': 'task 7'},
             {'item': 'Project coding', 'slots': 4, 'why': "deep goal work, the person's usual coding project", 'source': 'goal'},
             {'item': 'Study: system design', 'slots': 3, 'why': 'deep goal work', 'source': 'goal'},
@@ -104,7 +104,13 @@ EXAMPLE_OUTPUT = {'anchors': {'wake_slot': 4,
              'slots': 6,
              'why': 'light work for the weak and risky hours',
              'source': 'goal'},
-            {'item': 'Active breaks', 'slots': 8, 'why': 'off-screen blocks between screen work', 'source': 'rules'}],
+            {'item': 'Walk outside', 'slots': 1, 'why': 'outdoor block before meditation', 'source': 'break'},
+            {'item': 'Household chores', 'slots': 1, 'why': 'off-screen after the passport form', 'source': 'break'},
+            {'item': 'Sing songs', 'slots': 1, 'why': 'active break before the build session', 'source': 'break'},
+            {'item': 'Short workout', 'slots': 1, 'why': 'off-screen after the build session', 'source': 'break'},
+            {'item': 'Speaking exercises', 'slots': 1, 'why': 'vocal practice', 'source': 'break'},
+            {'item': 'Walk outside (long)', 'slots': 2, 'why': 'evening walk before dinner', 'source': 'break'},
+            {'item': 'Household chores: soak peanuts', 'slots': 1, 'why': 'nightly routine', 'source': 'break'}],
  'demand_vs_free': '23 slots of demand against 23 free: it fits, so nothing is cut',
  'windows': [{'slots': '10-15', 'clock': '10:00-13:00', 'rating': 'strong', 'evidence': '47% productive at 10:00 on 5 of 6 days'},
              {'slots': '18-23', 'clock': '14:00-17:00', 'rating': 'weak', 'evidence': 'adherence 19% on 14:00 starts, 13 blocks'},
@@ -225,10 +231,10 @@ How to work, in this exact order (your JSON fields follow the same order, facts 
 1. "anchors": wake_slot and sleep_slot (wake_slot: when the person is expected to wake, given under LAST NIGHT; sleep_slot: the usual bedtime from the
    sleep pattern, 48 if it is not before the day ends), then meals, workout and meditation, each with slots and a one-line reason. Defaults: lunch
    13:00-14:00, dinner 20:00-21:00; use another time only if history or preferences support it. Workout and meditation are mandatory, at their usual
-   time. Meditation must start at least {MEDITATION_GAP_SLOTS} slots (4 hours) after the last meal ended. "free_slots_left" = slots from wake_slot up to sleep_slot,
-   minus FIXED slots in that range, minus the slots of the anchors.
-2. "demand": a list of everything that will fill free_slots_left: tasks (due soonest and most slipped first), deep goal work, shallow screen work, and
-   active breaks. Their "slots" must add up to exactly free_slots_left. Deep work totals the DEEP WORK BUDGET given below (2 slots either way is fine).
+   time. Meditation is on an empty stomach: either in the morning before the first meal, or in the evening before dinner and at least
+   {MEDITATION_GAP_SLOTS} slots (4 hours) after lunch ended. Dinner may move later to make room for it, but must start by slot {LATEST_DINNER_SLOT} (21:30).
+2. "demand": a list of everything that will fill the free slots (from wake_slot up to sleep_slot, minus FIXED slots, minus the anchors): tasks (due
+   soonest and most slipped first), deep goal work, shallow screen work, and active breaks. List every break as its own item (e.g. "Sing songs", 1 slot), never one lump of "breaks". Their "slots" must add up to exactly that many free slots. Deep work totals the DEEP WORK BUDGET given below (2 slots either way is fine).
    Use the REAL DURATIONS and the person's real run lengths for sizes. "demand_vs_free" says whether it fits and what is cut.
 3. "windows": rate stretches of the day strong, weak or risky from the patterns and recent days. Each has "slots" ("first-last"), "clock" (the same
    stretch in clock time, e.g. slots 10-15 are "10:00-13:00": slot 0 is 05:00, slot n starts at 05:00 + n x 30 minutes, and the end is the start of slot last+1) and evidence with
@@ -252,8 +258,9 @@ Rules for the plan:
 - Each topic or project appears in at most one work block per half of the day (morning = wake to lunch, afternoon/evening = lunch to sleep). Do not
   split "Study: VLLM" into two separate blocks or repeat "Build: personal-agent" twice in the evening. If you need more time on the same topic,
   make that block longer, up to 3 slots.
-- Breaks are active, never leisure. Pick only from this menu: {", ".join(BREAK_MENU)}. A break takes one slot (two when it is a long one) and has
-  "minutes" between 5 and 30 (5 only for a tiny routine such as soaking peanuts); its title names a menu item. A short meditation or short workout break does not replace the mandatory ones.
+- Breaks are active, never leisure. Pick only from this menu: {", ".join(BREAK_MENU)}. "Rest" is not a break. A break takes one slot (at most two,
+  for a long walk or chore) and has "minutes" (5 to 30, 5 only for a tiny routine such as soaking peanuts) for the activity itself; the rest of its slot is transition. Never stretch a break to fill
+  time: if slots are left over, give them to work blocks, still keeping screen runs to 3 slots with a break or anchor between. Its title names a menu item. A short meditation or short workout break does not replace the mandatory ones.
 - The whole 24 hours counts: outdoor items may go at any hour. Include at least one outdoor block.
 - Name work after what the person really works on: use WHAT THE DEVICES SHOW THE PERSON WORKED ON and the goals. Do not invent topics, projects or courses.
   A title is a plain action, like "Study: VLLM architecture" or "Build: personal-agent". Never use app names, chat titles or labels like "ChatGPT:" or "VS Code:" in a title.
@@ -262,6 +269,16 @@ Rules for the plan:
 - Serve a long-term goal from the PREFERENCES AND GOALS section in the plan at least once.
 - If a CURRENT PLAN and FEEDBACK are given, first write "feedback_constraints" (the feedback as short constraints), then keep every block the feedback does not touch exactly as it is.
 - Do not write anything outside the JSON object.
+
+The code rejects the plan if any of these is true, so check each one before answering:
+- a FREE slot from wake_slot up to sleep_slot has no block, a block uses a FIXED slot, or two blocks overlap;
+- start_slot or slots is not a whole number, or slots is below 1;
+- a break is longer than 2 slots, its title does not name a menu item, or its minutes are outside 5-30;
+- the same screen mode (study or build) is in two touching blocks, or screen work runs more than {MAX_SCREEN_RUN} slots in a row;
+- meditation is not in the morning before the first meal or in the evening before dinner (4 hours after lunch), or dinner starts after slot {LATEST_DINNER_SLOT};
+- there is no workout, no meditation or no outdoor block;
+- deep work is outside the DEEP WORK BUDGET range, or sits outside a window you rated strong or weak;
+- a task that is due has no block, or a task is on two blocks.
 
 Answer with one JSON object with exactly these keys in this order: "anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist", "plan"
 (and "feedback_constraints" first when re-planning).

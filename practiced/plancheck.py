@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from practiced.planning import (
-    BREAK_MENU, BUDGET_TOLERANCE, DEPTHS, WAKE_TOLERANCE, KINDS, MAX_SCREEN_RUN, MEDITATION_GAP_SLOTS, MODES, SCREEN_MODES, SLOTS, PlanInputs,
+    BREAK_MENU, BUDGET_TOLERANCE, DEPTHS, LATEST_DINNER_SLOT, WAKE_TOLERANCE, KINDS, MAX_SCREEN_RUN, MEDITATION_GAP_SLOTS, MODES, SCREEN_MODES, SLOTS, PlanInputs,
     slot_range_clock,
 )
 
@@ -25,6 +25,91 @@ CHECKLIST = (
 
 def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
+
+
+# A break whose title is off the menu gets the menu item that fits its mode.
+_MENU_FOR_MODE = {"rest": "Short meditation", "physical": "Household chores", "outdoor": "Walk outside", "voice": "Sing songs"}
+
+
+def _whole(v: Any) -> Any:
+    """2.0 or "2" -> 2; anything else unchanged."""
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v.strip())
+    return v
+
+
+def repair(out: Any, inp: PlanInputs) -> list[str]:
+    """Fix trivial mistakes in place, before `check`, so they do not cost a re-ask. Returns what was changed, as sentences.
+    Only mechanical fixes: number types, break titles/minutes/length, window clock text, an empty checklist "fix"."""
+    if not isinstance(out, dict):
+        return []
+    notes: list[str] = []
+    plan = out.get("plan") if isinstance(out.get("plan"), list) else []
+    for b in plan:
+        if not isinstance(b, dict):
+            continue
+        for k in ("start_slot", "slots", "minutes", "task_id"):
+            if k in b and _whole(b[k]) is not b[k] and _is_int(_whole(b[k])):
+                b[k] = _whole(b[k])
+                notes.append(f'"{b.get("title")}": {k} made a whole number.')
+    for b in plan:
+        if not isinstance(b, dict) or b.get("kind") != "break" or not isinstance(b.get("title"), str):
+            continue
+        if not any(item in " ".join(b["title"].lower().split()) for item in BREAK_MENU) and b.get("mode") in _MENU_FOR_MODE:
+            new = _MENU_FOR_MODE[b["mode"]]
+            notes.append(f'break "{b["title"]}" renamed to "{new}" (off the menu).')
+            b["title"] = new
+        if _is_int(b.get("minutes")) and not 5 <= b["minutes"] <= 30:
+            notes.append(f'break "{b["title"]}": minutes {b["minutes"]} clamped to 5-30.')
+            b["minutes"] = min(max(b["minutes"], 5), 30)
+        if _is_int(b.get("slots")) and _is_int(b.get("start_slot")) and b["slots"] > 2:
+            notes += _shorten_break(b, plan)
+    for w in out.get("windows") or []:
+        rng = _window_slots(w) if isinstance(w, dict) else None
+        if rng and w.get("clock") != slot_range_clock(*rng):
+            w["clock"] = slot_range_clock(*rng)
+            notes.append(f'window {w["slots"]}: clock text corrected.')
+    demand = out.get("demand")
+    if isinstance(demand, list) and all(isinstance(d, dict) and _is_int(d.get("slots")) for d in demand):
+        anchors = out.get("anchors") if isinstance(out.get("anchors"), dict) else {}
+        wake, sleep = anchors.get("wake_slot"), anchors.get("sleep_slot")
+        if _is_int(wake) and _is_int(sleep):
+            fixed_slots = {s for f in inp.fixed for s in range(f.start, f.end)}
+            taken = sum(b["slots"] for b in plan if isinstance(b, dict) and b.get("kind") == "anchor" and _is_int(b.get("slots"))
+                        and _is_int(b.get("start_slot")) and wake <= b["start_slot"] < sleep)
+            left = sleep - wake - len([s for s in fixed_slots if wake <= s < sleep]) - taken
+            if sum(d["slots"] for d in demand) != left:
+                notes.append(f"demand adds up to {sum(d['slots'] for d in demand)}, not the {left} free slots (ignored; the plan is checked).")
+    cl = out.get("checklist")
+    if isinstance(cl, dict):
+        for k, v in cl.items():
+            if isinstance(v, dict) and v.get("ok") is False and not str(v.get("fix", "")).strip():
+                v["fix"] = "see the plan"
+    return notes
+
+
+def _shorten_break(b: dict, plan: list) -> list[str]:
+    """Cut a break to 2 slots; the cut slots go to the work block right before it, else the one right after it.
+    With no work neighbour it is left alone and `check` reports it."""
+    extra = b["slots"] - 2
+    end = b["start_slot"] + b["slots"]
+    blocks = [x for x in plan if isinstance(x, dict) and _is_int(x.get("start_slot")) and _is_int(x.get("slots"))]
+    before = next((x for x in blocks if x.get("kind") == "work" and x["start_slot"] + x["slots"] == b["start_slot"]), None)
+    after = next((x for x in blocks if x.get("kind") == "work" and x["start_slot"] == end), None)
+    if before is not None:
+        before["slots"] += extra
+        b["start_slot"] += extra
+        target = before
+    elif after is not None:
+        after["start_slot"] -= extra
+        after["slots"] += extra
+        target = after
+    else:
+        return []
+    b["slots"] = 2
+    return [f'break "{b["title"]}" cut to 2 slots; {extra} slot(s) given to "{target["title"]}".']
 
 
 def check(out: Any, inp: PlanInputs) -> list[str]:
@@ -122,14 +207,33 @@ def check(out: Any, inp: PlanInputs) -> list[str]:
         bad.append('The plan needs a workout block (kind "anchor", title containing "Workout").')
     meals = [b for b in ordered if b["kind"] == "anchor" and any(w in b["title"].lower() for w in ("lunch", "dinner", "breakfast", "meal"))]
     if meditation is not None:
-        before = [m for m in meals if m["start_slot"] + m["slots"] <= meditation["start_slot"]]
-        if before and meditation["start_slot"] - (before[-1]["start_slot"] + before[-1]["slots"]) < MEDITATION_GAP_SLOTS:
-            bad.append(f'Meditation starts less than 4 hours after "{before[-1]["title"]}" ended.')
+        bad += _check_meditation(meditation, meals)
     if not any(b["mode"] == "outdoor" for b in ordered):
         bad.append("The plan needs at least one outdoor block.")
 
     bad += _check_numbers(out, inp, ordered, wake, sleep, fixed_slots)
     return bad + _task_ids(inp, ordered, due=True)
+
+
+def _check_meditation(med: dict, meals: list[dict]) -> list[str]:
+    """Meditation goes on an empty stomach: in the morning before the first meal, or in the evening before dinner
+    (at least 4 hours after lunch). Dinner may move later for it, but must start by LATEST_DINNER_SLOT."""
+    bad: list[str] = []
+    m_start, m_end = med["start_slot"], med["start_slot"] + med["slots"]
+    dinner = next((m for m in meals if "dinner" in m["title"].lower()), None)
+    if dinner is not None and dinner["start_slot"] > LATEST_DINNER_SLOT:
+        bad.append(f'Dinner starts at slot {dinner["start_slot"]}; it may move later for meditation but must start by slot {LATEST_DINNER_SLOT} '
+                   f'({slot_range_clock(LATEST_DINNER_SLOT, LATEST_DINNER_SLOT)[:5]}).')
+    if not meals or m_end <= meals[0]["start_slot"]:
+        return bad                                   # morning, before the first meal
+    if dinner is not None and m_end <= dinner["start_slot"]:
+        earlier = [m for m in meals if m["start_slot"] < dinner["start_slot"]]
+        prev = earlier[-1] if earlier else None            # the meal before dinner (lunch): evening means after it
+        if prev is None or m_start >= prev["start_slot"] + prev["slots"]:
+            if prev is not None and m_start - (prev["start_slot"] + prev["slots"]) < MEDITATION_GAP_SLOTS:
+                bad.append(f'Evening meditation starts less than 4 hours after "{prev["title"]}" ended; move it later (dinner may move too) or to the morning.')
+            return bad
+    return bad + ["Meditation must be in the morning before the first meal, or in the evening before dinner."]
 
 
 def _task_ids(inp: PlanInputs, ordered: list[dict], *, due: bool) -> list[str]:
@@ -181,18 +285,15 @@ def _window_slots(w: Any) -> tuple[int, int] | None:
 def _check_numbers(out: dict, inp: PlanInputs, ordered: list[dict], wake: int, sleep: int, fixed_slots: set[int]) -> list[str]:
     """The arithmetic the model must get right: free slots, demand total, window clock times, the deep-work budget."""
     bad: list[str] = []
-    anchors = out.get("anchors") if isinstance(out.get("anchors"), dict) else {}
+    # The free-slot count is computed here, never asked of the model: it got this arithmetic wrong.
     anchor_slots = sum(b["slots"] for b in ordered if b["kind"] == "anchor" and wake <= b["start_slot"] < sleep)
     left = sleep - wake - len([s for s in fixed_slots if wake <= s < sleep]) - anchor_slots
-    if anchors.get("free_slots_left") != left:
-        bad.append(f"anchors.free_slots_left must be {left} (slots from wake_slot to sleep_slot, minus FIXED slots, minus the anchor blocks), not {anchors.get('free_slots_left')}.")
 
     demand = out.get("demand")
     if not isinstance(demand, list) or not demand or not all(isinstance(d, dict) and _is_int(d.get("slots")) and d["slots"] >= 0 for d in demand):
         bad.append('"demand" must be a list of items, each with whole-number "slots".')
-    elif sum(d["slots"] for d in demand) != left:
-        bad.append(f"The demand slots add up to {sum(d['slots'] for d in demand)} but must add up to exactly {left} (free_slots_left). "
-                   "Add goal work, shallow work or active breaks to the demand list, or cut items.")
+    # A demand total that misses the free slots is not checked: demand is the model's scratch work, and the plan itself must
+    # cover every free slot (checked in `check`). `repair` notes the mismatch.
 
     risky: list[tuple[int, int]] = []
     usable: list[tuple[int, int]] = []

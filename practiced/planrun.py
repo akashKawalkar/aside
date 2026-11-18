@@ -23,7 +23,7 @@ from practiced.digest import render as render_day
 from practiced.durations import real_durations, render_durations
 from practiced.llmcall import BadReply, call_json
 from practiced.patterns import compute_patterns, recent_work, render_patterns
-from practiced.plancheck import check, to_blocks
+from practiced.plancheck import check, repair, to_blocks
 from practiced.planning import DEFAULT_DIAL, PROMPT_VERSION, SLOTS, Fixed, PlanInputs, build_messages, dial_numbers, to_slot
 from schedule_gen.model import PENDING, DraftEntry
 
@@ -200,8 +200,11 @@ async def ask(client, inp: PlanInputs, *, retries: int = RETRIES) -> tuple[dict,
         except BadReply as e:
             out, done, reply, problems = None, None, e.text, [str(e)]
         else:
+            fixed = repair(out, inp)          # trivial mistakes are fixed by code, not re-asked
             problems = check(out, inp)
             if not problems:
+                if fixed:
+                    out["code_repairs"] = fixed
                 return out, done, attempt
         if attempt == retries:
             break
@@ -223,7 +226,7 @@ async def run_plan_once(pool, client, now: datetime) -> dict[str, Any]:
     out, done, reasked = await ask(client, inp)
     entries = [DraftEntry(title=b["title"], start_at=b["start"], end_at=b["end"], reason=b["why"], state=PENDING, task_id=b["task_id"]).to_json()
                for b in to_blocks(out, inp)]
-    reasoning = {k: out[k] for k in ("anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist") if k in out}
+    reasoning = {k: out[k] for k in ("anchors", "demand", "demand_vs_free", "windows", "placement_notes", "checklist", "code_repairs") if k in out}
     draft = await storage.insert_draft(
         pool, target_day=day, source="llm", model=done.model, instruction="", entries=entries, rejected=[],
         inputs={**summary, "planner": True, "reasked": reasked, "reasoning": reasoning},

@@ -145,7 +145,7 @@ async def replan(pool, client, now: datetime, note: str) -> dict[str, Any]:
         await storage.delete_schedule_entry(pool, r["id"])
     for r in trim:
         await storage.update_schedule_entry(pool, r["id"], title=r["title"], start_at=r["start_at"], end_at=cut)
-    reasoning = {k: out[k] for k in ("feedback_constraints", "anchors", "demand", "windows", "placement_notes") if k in out}
+    reasoning = {k: out[k] for k in ("feedback_constraints", "anchors", "demand", "windows", "placement_notes", "code_repairs") if k in out}
     draft = await storage.insert_draft(
         pool, target_day=day, source="llm", model=done.model, instruction=note.strip(), entries=entries, rejected=[],
         inputs={**summary, "planner": True, "replan": True, "from_slot": n, "reasked": reasked, "reasoning": reasoning},
